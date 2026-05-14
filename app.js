@@ -111,8 +111,21 @@ function renderHome() {
     return [{ subject: s.name, unit: u.name, method: u.studyMethod, hours: rec }];
   });
 
-  let html = `
-    <div style="padding-bottom:16px">
+  let html = `<div style="padding-bottom:16px">`;
+
+  if (!state.data.settings.geminiApiKey) {
+    html += `
+      <div onclick="navigate('settings')" style="margin:12px 16px 0;background:#fff3cd;border-radius:14px;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer;border:1.5px solid #ffd000">
+        <div style="font-size:24px">🤖</div>
+        <div style="flex:1">
+          <div style="font-weight:700;font-size:14px">AI機能を有効にしよう</div>
+          <div style="font-size:12px;color:#7a6000;margin-top:2px">タップして無料のAIキーを設定（3ステップで完了）</div>
+        </div>
+        <div style="color:#7a6000;font-size:18px">›</div>
+      </div>`;
+  }
+
+  html += `
       <div class="today-card">
         <div class="today-date">${dateStr}</div>
         <div class="today-title">今日やること</div>
@@ -493,29 +506,71 @@ function deleteLog(id) {
 function renderSettings() {
   const el = document.getElementById('view-settings');
   const key = state.data.settings.geminiApiKey;
-  const masked = key ? key.slice(0, 8) + '••••••••' : '未設定';
 
   el.innerHTML = `
     <div class="page-header"><div class="page-title">設定<span>.</span></div></div>
+    <div style="padding:0 16px 32px">
 
-    <div style="padding:0 16px">
+      ${!key ? `
+      <div style="background:linear-gradient(135deg,#fff3cd,#ffe69c);border-radius:16px;padding:16px;margin-bottom:20px;border:1.5px solid #ffd000">
+        <div style="font-size:15px;font-weight:700;margin-bottom:4px">⚠️ AI機能が使えません</div>
+        <div style="font-size:13px;color:#7a6000;line-height:1.5">下の手順でAIキーを設定すると、学習プランの自動生成などのAI機能が使えるようになります。</div>
+      </div>` : `
+      <div style="background:#d4f5ed;border-radius:16px;padding:16px;margin-bottom:20px">
+        <div style="font-size:15px;font-weight:700;color:#00b894">✅ AI機能が使えます</div>
+      </div>`}
+
       <div class="settings-section">
-        <div class="settings-section-title">Gemini API</div>
-        <div class="card" style="margin:0">
-          <div class="form-group" style="margin-bottom:12px">
-            <label class="form-label">APIキー</label>
-            <input type="password" class="form-input" id="api-key-input"
-              placeholder="AIzaSy..." value="${key}">
+        <div class="settings-section-title">🤖 AIキーって何？</div>
+        <div class="card" style="margin:0;padding:16px">
+          <div style="font-size:14px;line-height:1.8;color:var(--text)">
+            このアプリはGoogleのAI（Gemini）を使って、あなたの科目に合った学習プランを自動で作ります。<br><br>
+            AIを使うには「AIキー」と呼ばれる<strong>通行証のような文字列</strong>が必要です。<br><br>
+            Googleアカウントさえあれば<strong style="color:var(--success)">完全無料</strong>で取得でき、クレジットカードも不要です。個人利用なら無料枠で十分です。
           </div>
-          <div class="text-small mb8" style="line-height:1.5">
-            <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--primary)">Google AI Studio</a> で無料取得できます
-          </div>
-          <button class="btn btn-primary btn-full" onclick="saveApiKey()">保存</button>
         </div>
       </div>
 
       <div class="settings-section">
-        <div class="settings-section-title">データ</div>
+        <div class="settings-section-title">📋 取得手順（3ステップ）</div>
+        <div class="card" style="margin:0;padding:0">
+          ${[
+            ['1', '下のボタンをタップ', 'Google AI Studioというページが開きます（Googleアカウントでログイン）'],
+            ['2', '「Create API key」を押す', '青いボタンを押すだけ。数秒で「AIzaSy...」から始まる文字列が表示されます'],
+            ['3', 'コピーして下に貼り付ける', 'その文字列をコピーして、このページ下の入力欄に貼り付けて「保存」を押すだけ'],
+          ].map(([n, title, desc]) => `
+            <div style="display:flex;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border)">
+              <div style="width:28px;height:28px;border-radius:50%;background:var(--primary);color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0">${n}</div>
+              <div>
+                <div style="font-weight:700;font-size:14px">${title}</div>
+                <div style="font-size:12px;color:var(--subtext);margin-top:2px;line-height:1.4">${desc}</div>
+              </div>
+            </div>`).join('')}
+          <div style="padding:14px 16px">
+            <a href="https://aistudio.google.com/app/apikey" target="_blank"
+              style="display:flex;align-items:center;justify-content:center;gap:8px;background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:white;border-radius:12px;padding:13px;font-weight:700;font-size:15px;text-decoration:none">
+              🔗 Google AI Studio を開く
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">🔑 AIキーを入力</div>
+        <div class="card" style="margin:0">
+          <div class="form-group" style="margin-bottom:12px">
+            <input type="password" class="form-input" id="api-key-input"
+              placeholder="AIzaSy... をここに貼り付ける" value="${key}">
+          </div>
+          <div style="font-size:12px;color:var(--subtext);margin-bottom:12px;line-height:1.5">
+            🔒 キーはこの端末の中だけに保存されます。外部に送信されることはありません。
+          </div>
+          <button class="btn btn-primary btn-full" onclick="saveApiKey()">保存する</button>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">データ管理</div>
         <div class="card" style="margin:0">
           <div class="text-small" style="margin-bottom:12px">
             科目数: ${state.data.subjects.length} ／ 記録数: ${state.data.logs.length}
@@ -529,7 +584,8 @@ function renderSettings() {
         <div class="card" style="margin:0">
           <div class="text-small" style="line-height:1.8">
             <strong>StudyPath</strong> v1.0<br>
-            iPhoneでホーム画面に追加すると<br>アプリとして使えます
+            📱 iPhoneでホーム画面に追加するとアプリとして使えます<br>
+            （Safari → 共有ボタン → ホーム画面に追加）
           </div>
         </div>
       </div>
