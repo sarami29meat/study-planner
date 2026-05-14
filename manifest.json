@@ -1,0 +1,14 @@
+{
+  "name": "StudyPath",
+  "short_name": "StudyPath",
+  "description": "AIが学習ロードマップを逆算してくれる勉強管理アプリ",
+  "start_url": "/study-planner/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#6C5CE7",
+  "theme_color": "#6C5CE7",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
