@@ -607,8 +607,13 @@ function showAddSubject() {
       </div>
     </div>
     <div class="form-group">
-      <label class="form-label">学習単元（1行ずつ入力）</label>
-      <textarea class="form-textarea" id="ns-units" placeholder="文法&#10;語彙&#10;リスニング&#10;リーディング" style="height:120px"></textarea>
+      <div class="flex-between mb8">
+        <label class="form-label" style="margin-bottom:0">学習単元（1行ずつ）</label>
+        <button class="btn btn-secondary" style="padding:5px 10px;font-size:12px" onclick="suggestUnitsAI()">
+          ✨ AIに提案してもらう
+        </button>
+      </div>
+      <textarea class="form-textarea" id="ns-units" placeholder="空欄でもOK。AIボタンで自動生成できます。&#10;または手動で1行ずつ入力：&#10;文法&#10;語彙&#10;リスニング" style="height:120px"></textarea>
     </div>
     <button class="btn btn-primary btn-full" onclick="addSubject()">追加する</button>
   `);
@@ -763,8 +768,10 @@ async function runAIPlan(subjectId) {
 
   const s = state.data.subjects.find(s => s.id === subjectId);
   if (!s) return;
+
+  // 単元がなければまずAIに生成させる
   if (s.units.length === 0) {
-    showToast('単元を追加してからAIプランを生成してください');
+    await generateUnitsAndPlan(s, apiKey);
     return;
   }
 
@@ -849,6 +856,80 @@ async function runAIPlan(subjectId) {
     console.error(e);
     showToast('エラー: ' + e.message);
   }
+}
+
+// フォームからAIに単元を提案してもらう（科目追加シート内）
+async function suggestUnitsAI() {
+  const apiKey = state.data.settings.geminiApiKey;
+  if (!apiKey) { showToast('設定タブでGemini APIキーを設定してください'); return; }
+
+  const name = document.getElementById('ns-name').value.trim();
+  const goal = document.getElementById('ns-goal').value.trim();
+  if (!name) { showToast('先に科目名を入力してください'); return; }
+
+  showAILoading(true);
+  try {
+    const units = await fetchSuggestedUnits(name, goal || '習得・マスター', apiKey);
+    document.getElementById('ns-units').value = units.map(u => u.name).join('\n');
+    showAILoading(false);
+    showToast(`✨ ${units.length}個の単元を提案しました`);
+  } catch (e) {
+    showAILoading(false);
+    showToast('エラー: ' + e.message);
+  }
+}
+
+// 単元ゼロの科目に対してAIが単元生成→プラン生成
+async function generateUnitsAndPlan(s, apiKey) {
+  showAILoading(true);
+  try {
+    const units = await fetchSuggestedUnits(s.name, s.goal, apiKey);
+    units.forEach((u, i) => {
+      s.units.push({ id: uid(), name: u.name, order: i, estimatedHours: 0, studyMethod: '', status: 'not_started' });
+    });
+    saveData(state.data);
+    showAILoading(false);
+    showToast(`✨ ${units.length}個の単元を生成しました。続けてプランを作成します…`);
+    // 少し待ってからプラン生成
+    setTimeout(() => runAIPlan(s.id), 800);
+  } catch (e) {
+    showAILoading(false);
+    showToast('エラー: ' + e.message);
+  }
+}
+
+async function fetchSuggestedUnits(subjectName, goal, apiKey) {
+  const prompt = `あなたは優秀な学習コーチです。
+科目「${subjectName}」で「${goal}」を達成するために必要な学習単元を、
+初心者から目標達成までの順序で網羅的にリストアップしてください。
+各分野の定番教材・カリキュラムを参考に、抜け漏れなく列挙してください。
+
+以下のJSON形式のみで回答してください（説明文不要）:
+{
+  "units": [
+    {"name": "単元名（簡潔に）", "estimatedHours": 5}
+  ]
+}`;
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: 'application/json' }
+      })
+    }
+  );
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error?.message || `HTTP ${res.status}`);
+  }
+  const data = await res.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const parsed = parseJSON(text);
+  return parsed.units || [];
 }
 
 function parseJSON(text) {
