@@ -391,8 +391,8 @@ function renderLog() {
         <input type="number" class="form-input" id="log-minutes" placeholder="例: 45" min="1" max="720">
       </div>
       <div class="form-group">
-        <label class="form-label">日付</label>
-        <input type="date" class="form-input" id="log-date" value="${today()}">
+        <label class="form-label">日付（yyyy / mm / dd）</label>
+        ${buildDateSelects('log-d', today())}
       </div>
       <div class="form-group">
         <label class="form-label">メモ（任意）</label>
@@ -415,7 +415,7 @@ function selectLogSubject(id) {
 
 function saveLog() {
   const minutes = parseInt(document.getElementById('log-minutes').value);
-  const date = document.getElementById('log-date').value;
+  const date = getDateFromSelects('log-d');
   const notes = document.getElementById('log-notes').value.trim();
 
   if (!state.logUnitId) { showToast('単元を選択してください'); return; }
@@ -553,7 +553,39 @@ function confirmClearAll() {
 }
 
 // ── Add Subject Sheet ─────────────────────
+function buildDateSelects(prefix, defaultISO) {
+  const [dy, dm, dd] = defaultISO.split('-').map(Number);
+  const thisYear = new Date().getFullYear();
+  const years = Array.from({length: 10}, (_, i) => thisYear + i);
+  const months = Array.from({length: 12}, (_, i) => i + 1);
+  const days = Array.from({length: 31}, (_, i) => i + 1);
+  const pad = n => String(n).padStart(2, '0');
+
+  return `
+    <div style="display:flex;gap:6px;align-items:center">
+      <select class="form-select" id="${prefix}-year" style="flex:3">
+        ${years.map(y => `<option value="${y}" ${y===dy?'selected':''}>${y}</option>`).join('')}
+      </select>
+      <span style="color:var(--subtext);font-weight:600">/</span>
+      <select class="form-select" id="${prefix}-month" style="flex:2">
+        ${months.map(m => `<option value="${pad(m)}" ${m===dm?'selected':''}>${pad(m)}</option>`).join('')}
+      </select>
+      <span style="color:var(--subtext);font-weight:600">/</span>
+      <select class="form-select" id="${prefix}-day" style="flex:2">
+        ${days.map(d => `<option value="${pad(d)}" ${d===dd?'selected':''}>${pad(d)}</option>`).join('')}
+      </select>
+    </div>`;
+}
+
+function getDateFromSelects(prefix) {
+  const y = document.getElementById(`${prefix}-year`).value;
+  const m = document.getElementById(`${prefix}-month`).value;
+  const d = document.getElementById(`${prefix}-day`).value;
+  return `${y}-${m}-${d}`;
+}
+
 function showAddSubject() {
+  const def = getDefaultDeadline();
   showSheet(`
     <div class="sheet-title">科目を追加</div>
     <div class="form-group">
@@ -565,11 +597,11 @@ function showAddSubject() {
       <input type="text" class="form-input" id="ns-goal" placeholder="例: TOEIC 800点、応用情報合格">
     </div>
     <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">期限</label>
-        <input type="date" class="form-input" id="ns-deadline" value="${getDefaultDeadline()}">
+      <div class="form-group" style="flex:2">
+        <label class="form-label">期限（yyyy / mm / dd）</label>
+        ${buildDateSelects('ns-dl', def)}
       </div>
-      <div class="form-group">
+      <div class="form-group" style="flex:1">
         <label class="form-label">1日の目安（時間）</label>
         <input type="number" class="form-input" id="ns-hours" value="2" min="0.5" max="12" step="0.5">
       </div>
@@ -591,7 +623,7 @@ function getDefaultDeadline() {
 function addSubject() {
   const name = document.getElementById('ns-name').value.trim();
   const goal = document.getElementById('ns-goal').value.trim();
-  const deadline = document.getElementById('ns-deadline').value;
+  const deadline = getDateFromSelects('ns-dl');
   const hoursPerDay = parseFloat(document.getElementById('ns-hours').value) || 2;
   const unitsRaw = document.getElementById('ns-units').value;
 
