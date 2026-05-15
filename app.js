@@ -744,6 +744,10 @@ function showAddSubject() {
       <label class="form-label">目標</label>
       <input type="text" class="form-input" id="ns-goal" placeholder="例: TOEIC 800点、応用情報合格">
     </div>
+    <div class="form-group">
+      <label class="form-label">今の自分のレベル <span style="color:var(--subtext);font-weight:400">（任意）</span></label>
+      <input type="text" class="form-input" id="ns-level" placeholder="例: プログラミング未経験 / C言語は知っている / 基礎はわかる">
+    </div>
     <div class="form-row">
       <div class="form-group" style="flex:2">
         <label class="form-label">期限（yyyy / mm / dd）</label>
@@ -767,6 +771,7 @@ function getDefaultDeadline() {
 function addSubject() {
   const name = document.getElementById('ns-name').value.trim();
   const goal = document.getElementById('ns-goal').value.trim();
+  const level = document.getElementById('ns-level').value.trim();
   const deadline = getDateFromSelects('ns-dl');
   const hoursPerDay = parseFloat(document.getElementById('ns-hours').value) || 2;
 
@@ -775,7 +780,7 @@ function addSubject() {
   if (!deadline) { showToast('期限を入力してください'); return; }
 
   const subject = {
-    id: uid(), name, goal, deadline, hoursPerDay,
+    id: uid(), name, goal, level, deadline, hoursPerDay,
     createdAt: Date.now(), units: [], aiPlan: null
   };
 
@@ -990,7 +995,8 @@ async function runAIPlan(subjectId) {
 目標: ${s.goal}
 期限: ${deadline}（今日から${dl}日後）
 学習単元: ${unitNames}
-1日の目安学習時間: ${s.hoursPerDay}時間
+1日の目安学習時間: ${s.hoursPerDay}時間${s.level ? `
+現在のレベル: ${s.level}（このレベルに合わせて単元の深さ・順序・時間配分を最適化すること）` : ''}
 
 以下のJSON形式のみで回答してください（説明文不要）:
 {
@@ -1069,7 +1075,7 @@ async function suggestUnitsAI() {
 async function generateUnitsAndPlan(s) {
   showAILoading(true);
   try {
-    const units = await fetchSuggestedUnits(s.name, s.goal);
+    const units = await fetchSuggestedUnits(s.name, s.goal, s.level || '');
     units.forEach((u, i) => {
       s.units.push({ id: uid(), name: u.name, order: i, estimatedHours: 0, studyMethod: '', status: 'not_started' });
     });
@@ -1084,11 +1090,12 @@ async function generateUnitsAndPlan(s) {
   }
 }
 
-async function fetchSuggestedUnits(subjectName, goal) {
+async function fetchSuggestedUnits(subjectName, goal, level = '') {
+  const levelLine = level ? `\n学習者の現在のレベル: ${level}（このレベルを前提に、既知の内容は省略・圧縮し、必要な単元から始めること）` : '';
   const prompt = `あなたは優秀な学習コーチです。
 科目「${subjectName}」で「${goal}」を達成するために必要な学習単元を、
-初心者から目標達成までの順序で網羅的にリストアップしてください。
-各分野の定番教材・カリキュラムを参考に、抜け漏れなく列挙してください。
+目標達成までの順序で網羅的にリストアップしてください。
+各分野の定番教材・カリキュラムを参考に、抜け漏れなく列挙してください。${levelLine}
 
 以下のJSON形式のみで回答してください（説明文不要）:
 {
