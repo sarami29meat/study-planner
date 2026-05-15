@@ -1217,115 +1217,114 @@ function showUnitDetail(subjectId, unitId) {
   `);
 }
 
-// ── Breadboard SVG Renderer ───────────────
-function drawBreadboardSVG(layout) {
-  if (!layout || !layout.components) return '';
-  const H = 16, BB_X = 158, BB_Y = 48;
-  const COLS = ['a','b','c','d','e','f','g','h','i','j'];
-  const ROWS = Math.min(layout.rows || 20, 25);
-  const SVG_W = 490, SVG_H = BB_Y + ROWS * H + 50;
+// ── Circuit SVG from circuitSteps ─────────
+function drawCircuitSVG(steps) {
+  if (!steps || !steps.length) return '';
 
-  function pt(ref) {
-    if (!ref) return null;
-    const m = String(ref).match(/^(\d+)-([a-j])$/i);
-    if (m) {
-      const r = parseInt(m[1]), c = m[2].toLowerCase(), ci = COLS.indexOf(c);
-      if (ci < 0 || r < 1 || r > ROWS) return null;
-      return { x: BB_X + 20 + ci * H + (ci >= 5 ? 10 : 0), y: BB_Y + 14 + (r - 1) * H };
-    }
-    const pmap = { '5V':{x:143,y:BB_Y+14}, '3V3':{x:143,y:BB_Y+30}, 'GND':{x:143,y:BB_Y+46}, 'GND2':{x:143,y:BB_Y+62} };
-    ['D2','D3','D4','D5','D6','D7','D8','D9','D10','D11','D12','D13'].forEach((p,i) => { pmap[p]={x:143,y:BB_Y+78+i*H}; });
-    return pmap[ref] || null;
+  const ARD_ALL = ['5V','3.3V','GND','D2','D3','D4','D5','D6','D7','D8','D9','D10','D11','D12','D13'];
+  const BB_COLS = ['a','b','c','d','e','f','g','h','i','j'];
+  const WC = {'赤':'#e53935','黒':'#212121','青':'#1565c0','緑':'#2e7d32','黄':'#f9a825','白':'#9e9e9e','橙':'#e65100','紫':'#6a1b9a'};
+
+  function parseBB(t) {
+    const m = String(t||'').match(/(\d+)行[\s　]*([a-j])列/i);
+    return m ? {row:parseInt(m[1]), col:m[2].toLowerCase()} : null;
+  }
+  function parsePin(t) {
+    for (const p of ARD_ALL) if (String(t||'').includes(p)) return p;
+    return null;
   }
 
-  let s = `<svg viewBox="0 0 ${SVG_W} ${SVG_H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;border-radius:12px;background:#f4f4f0;font-family:sans-serif">`;
-
-  // Title
-  if (layout.title) s += `<text x="${SVG_W/2}" y="26" text-anchor="middle" font-size="13" font-weight="bold" fill="#333">${layout.title}</text>`;
-
-  // Arduino Uno board
-  const ardH = ROWS * H + 20;
-  s += `<rect x="8" y="${BB_Y-6}" width="132" height="${ardH}" rx="8" fill="#1565c0" stroke="#0d47a1" stroke-width="2"/>`;
-  s += `<text x="74" y="${BB_Y+8}" text-anchor="middle" font-size="9" fill="white" font-weight="bold">Arduino Uno</text>`;
-  const ardPinDefs = [
-    {l:'5V',c:'#e53935'},{l:'3.3V',c:'#fb8c00'},{l:'GND',c:'#424242'},{l:'GND',c:'#424242'},
-    ...[2,3,4,5,6,7,8,9,10,11,12,13].map(n=>({l:`D${n}`,c:'#7b1fa2'}))
-  ];
-  ardPinDefs.forEach((p,i) => {
-    const py = BB_Y + 14 + i * H;
-    s += `<rect x="118" y="${py-5}" width="22" height="10" rx="2" fill="${p.c}"/>`;
-    s += `<text x="115" y="${py+4}" text-anchor="end" font-size="8" fill="white">${p.l}</text>`;
-  });
-
-  // Breadboard body
-  const bbW = COLS.length * H + 10 + 22, bbH = ROWS * H + 22;
-  s += `<rect x="${BB_X}" y="${BB_Y-6}" width="${bbW}" height="${bbH}" rx="8" fill="#ddd8c4" stroke="#b8ae98" stroke-width="1.5"/>`;
-
-  // Column labels
-  COLS.forEach((c,i) => {
-    s += `<text x="${BB_X+20+i*H+(i>=5?10:0)}" y="${BB_Y+6}" text-anchor="middle" font-size="8" fill="${i<5?'#555':'#777'}">${c}</text>`;
-  });
-
-  // Holes + row numbers
-  for (let r = 1; r <= ROWS; r++) {
-    const ry = BB_Y + 14 + (r-1) * H;
-    s += `<text x="${BB_X+10}" y="${ry+4}" text-anchor="middle" font-size="7" fill="#888">${r}</text>`;
-    COLS.forEach((c,i) => {
-      const hx = BB_X + 20 + i*H + (i>=5?10:0);
-      s += `<circle cx="${hx}" cy="${ry}" r="3.5" fill="#a89e88" stroke="#8a8070" stroke-width="0.5"/>`;
+  // Collect used rows and pins
+  const usedRows = new Set(), usedPins = new Set();
+  steps.forEach(s => {
+    [s.from, s.to].forEach(t => {
+      const b = parseBB(t); if (b) usedRows.add(b.row);
+      const p = parsePin(t); if (p) usedPins.add(p);
     });
+  });
+
+  const rowList = [...usedRows].sort((a,b)=>a-b);
+  const minR = Math.max(1, (rowList[0]||1)-1), maxR = (rowList[rowList.length-1]||5)+1;
+  const dispRows = Array.from({length:maxR-minR+1},(_,i)=>minR+i);
+  const dispPins = ARD_ALL.filter(p => usedPins.has(p));
+  if (!dispPins.length) dispPins.push(...ARD_ALL.slice(0,4));
+
+  // Layout
+  const PH = 24, RH = 22, HG = 13;
+  const AX=10, AY=44, AW=110;
+  const BX=190, BY=44;
+  const AH = dispPins.length*PH+24;
+  const BW = BB_COLS.length*HG+18+20, BH = dispRows.length*RH+24;
+  const SW = BX+BW+16, SH = Math.max(AY+AH, BY+BH)+30;
+
+  function ardXY(pin) {
+    const i = dispPins.indexOf(pin); if (i<0) return null;
+    return {x: AX+AW, y: AY+20+i*PH};
   }
-  // Center gap
-  const gx = BB_X + 20 + 5*H + 5;
-  s += `<line x1="${gx}" y1="${BB_Y+2}" x2="${gx}" y2="${BB_Y+bbH-8}" stroke="#c0b898" stroke-width="1" stroke-dasharray="3,2"/>`;
+  function bbXY(row, col) {
+    const ri = dispRows.indexOf(row), ci = BB_COLS.indexOf(col);
+    if (ri<0||ci<0) return null;
+    return {x: BX+22+ci*HG+(ci>=5?10:0), y: BY+18+ri*RH};
+  }
+  function getXY(text) {
+    const b = parseBB(text);
+    if (b) { const xy = bbXY(b.row, b.col); return xy ? {...xy, label:`${b.row}行${b.col}列`} : null; }
+    const p = parsePin(text);
+    if (p) { const xy = ardXY(p); return xy ? {...xy, label:p} : null; }
+    return null;
+  }
+
+  let s = `<svg viewBox="0 0 ${SW} ${SH}" xmlns="http://www.w3.org/2000/svg" style="width:100%;border-radius:12px;background:#f8f7f2;font-family:sans-serif">`;
+
+  // Arduino board
+  s += `<rect x="${AX}" y="${AY}" width="${AW}" height="${AH}" rx="8" fill="#1565c0" stroke="#0d47a1" stroke-width="2"/>`;
+  s += `<text x="${AX+AW/2}" y="${AY+14}" text-anchor="middle" font-size="10" fill="white" font-weight="bold">Arduino Uno</text>`;
+  dispPins.forEach((pin,i) => {
+    const py = AY+20+i*PH;
+    const pc = pin==='5V'?'#e53935':pin==='GND'?'#424242':pin==='3.3V'?'#fb8c00':'#7b1fa2';
+    s += `<rect x="${AX+AW-20}" y="${py-7}" width="20" height="14" rx="3" fill="${pc}"/>`;
+    s += `<text x="${AX+AW-24}" y="${py+4}" text-anchor="end" font-size="9" fill="white" font-weight="bold">${pin}</text>`;
+    s += `<circle cx="${AX+AW}" cy="${py}" r="3.5" fill="${pc}" stroke="white" stroke-width="1"/>`;
+  });
+
+  // Breadboard
+  s += `<rect x="${BX}" y="${BY}" width="${BW}" height="${BH}" rx="8" fill="#e8e0c8" stroke="#c0b090" stroke-width="1.5"/>`;
+  BB_COLS.forEach((c,ci) => {
+    const x = BX+22+ci*HG+(ci>=5?10:0);
+    s += `<text x="${x}" y="${BY+11}" text-anchor="middle" font-size="8" fill="${ci<5?'#555':'#888'}" font-weight="bold">${c}</text>`;
+  });
+  // Center divider
+  const dvX = BX+22+5*HG+5;
+  s += `<line x1="${dvX}" y1="${BY+14}" x2="${dvX}" y2="${BY+BH-6}" stroke="#b8a888" stroke-width="1.5" stroke-dasharray="3,2"/>`;
+  // Row holes
+  dispRows.forEach((row,ri) => {
+    const ry = BY+18+ri*RH;
+    s += `<text x="${BX+11}" y="${ry+4}" text-anchor="middle" font-size="8" fill="#888" font-weight="bold">${row}</text>`;
+    BB_COLS.forEach((c,ci) => {
+      const hx = BX+22+ci*HG+(ci>=5?10:0);
+      s += `<circle cx="${hx}" cy="${ry}" r="4" fill="#b8ae98" stroke="#9a9080" stroke-width="0.8"/>`;
+    });
+  });
 
   // Wires
-  (layout.wires||[]).forEach(w => {
-    const p1 = pt(w.from), p2 = pt(w.to);
-    if (!p1 || !p2) return;
-    const cx = (p1.x+p2.x)/2, cy = Math.min(p1.y,p2.y) - 20;
-    s += `<path d="M${p1.x},${p1.y} C${cx},${cy} ${cx},${cy} ${p2.x},${p2.y}" fill="none" stroke="${w.color||'#888'}" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>`;
-    s += `<circle cx="${p1.x}" cy="${p1.y}" r="3" fill="${w.color||'#888'}"/>`;
-    s += `<circle cx="${p2.x}" cy="${p2.y}" r="3" fill="${w.color||'#888'}"/>`;
-    if (w.label) {
-      s += `<text x="${cx}" y="${cy-4}" text-anchor="middle" font-size="7" fill="${w.color||'#888'}">${w.label}</text>`;
-    }
-  });
-
-  // Components
-  (layout.components||[]).forEach(comp => {
-    const p1 = pt(comp.pin1), p2 = pt(comp.pin2);
-    if (!p1 || !p2) return;
-    const cx = (p1.x+p2.x)/2, cy = (p1.y+p2.y)/2;
-    const spanH = Math.abs(p2.y-p1.y), topY = Math.min(p1.y,p2.y);
-    const col = comp.color || (comp.type==='resistor'?'#c8921a':comp.type==='led'?'#e53935':'#1e88e5');
-    // Lead lines
-    s += `<line x1="${p1.x}" y1="${p1.y}" x2="${cx}" y2="${topY+2}" stroke="#666" stroke-width="1.5"/>`;
-    s += `<line x1="${p2.x}" y1="${p2.y}" x2="${cx}" y2="${topY+spanH-2}" stroke="#666" stroke-width="1.5"/>`;
-    // Body
-    s += `<rect x="${cx-9}" y="${topY}" width="18" height="${Math.max(spanH,12)}" rx="4" fill="${col}" stroke="rgba(0,0,0,0.2)" stroke-width="1"/>`;
-    // LED glow
-    if (comp.type==='led') s += `<rect x="${cx-9}" y="${topY}" width="18" height="${Math.max(spanH,12)}" rx="4" fill="${col}" opacity="0.3"/>`;
-    // Label
-    s += `<text x="${cx}" y="${cy+3}" text-anchor="middle" font-size="7" fill="white" font-weight="bold">${comp.label||comp.type}</text>`;
-    // Polarity
-    if (comp.type==='led') {
-      s += `<text x="${p1.x+6}" y="${topY-4}" font-size="8" fill="${col}" font-weight="bold">+</text>`;
-      s += `<text x="${p2.x+6}" y="${topY+spanH+10}" font-size="8" fill="#666">−</text>`;
-    }
+  steps.forEach(step => {
+    const p1 = getXY(step.from), p2 = getXY(step.to);
+    if (!p1||!p2) return;
+    const wc = WC[step.wire]||'#888888';
+    const cy2 = Math.min(p1.y,p2.y) - 18;
+    const mx = (p1.x+p2.x)/2;
+    s += `<path d="M${p1.x},${p1.y} C${mx},${cy2} ${mx},${cy2} ${p2.x},${p2.y}" fill="none" stroke="${wc}" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>`;
+    s += `<circle cx="${p1.x}" cy="${p1.y}" r="4" fill="${wc}" stroke="white" stroke-width="1"/>`;
+    s += `<circle cx="${p2.x}" cy="${p2.y}" r="4" fill="${wc}" stroke="white" stroke-width="1"/>`;
+    // Labels at endpoints
+    const lx1 = p1.x < BX ? p1.x-4 : p1.x+6;
+    const lx2 = p2.x < BX ? p2.x-4 : p2.x+6;
+    s += `<text x="${lx1}" y="${p1.y-7}" font-size="8" fill="${wc}" font-weight="bold" text-anchor="middle">${p1.label}</text>`;
+    s += `<text x="${lx2}" y="${p2.y-7}" font-size="8" fill="${wc}" font-weight="bold" text-anchor="middle">${p2.label}</text>`;
   });
 
   // Legend
-  s += `<rect x="${BB_X}" y="${BB_Y+bbH+2}" width="${bbW}" height="16" rx="4" fill="none"/>`;
-  const legendItems = [
-    {c:'#e53935',l:'電源(+)'},{c:'#424242',l:'GND(−)'},{c:'#7b1fa2',l:'信号線'},{c:'#1565c0',l:'データ'}
-  ];
-  legendItems.forEach((li,i) => {
-    const lx = BB_X + i * 90;
-    s += `<circle cx="${lx+6}" cy="${BB_Y+bbH+10}" r="4" fill="${li.c}"/>`;
-    s += `<text x="${lx+13}" y="${BB_Y+bbH+14}" font-size="8" fill="#555">${li.l}</text>`;
-  });
-
+  s += `<text x="${AX}" y="${SH-8}" font-size="9" fill="#888">● 赤=電源 ● 黒=GND ● 紫=信号 ● 青/緑=その他</text>`;
   return s + '</svg>';
 }
 
@@ -1461,6 +1460,9 @@ async function showUnitLesson(subjectId, unitId) {
 
     let circuitImg = null;
     let circuitSVG = null;
+    if (isHW && lesson.circuitSteps?.length) {
+      circuitSVG = drawCircuitSVG(lesson.circuitSteps);
+    }
 
     const ytQuery = encodeURIComponent(lesson.videoQuery || `${u.name} ${s.name} 解説`);
 
@@ -1522,9 +1524,17 @@ async function showUnitLesson(subjectId, unitId) {
           </div>`).join('')}
       </div>` : ''}
 
+      ${circuitSVG ? `
+      <div style="margin-bottom:12px">
+        <div style="font-size:14px;font-weight:700;margin-bottom:8px">🗺️ 回路図（配線マップ）</div>
+        <div style="background:white;border-radius:14px;padding:10px;border:1.5px solid var(--border);overflow-x:auto;-webkit-overflow-scrolling:touch">
+          ${circuitSVG}
+        </div>
+      </div>` : ''}
+
       ${isHW && lesson.circuitSteps?.length ? `
       <div style="margin-bottom:16px">
-        <div style="font-size:14px;font-weight:700;margin-bottom:4px">🔌 配線手順</div>
+        <div style="font-size:14px;font-weight:700;margin-bottom:4px">🔌 配線手順（ステップごと）</div>
         <div style="font-size:12px;color:var(--subtext);margin-bottom:10px">順番通りに接続してください。同じ行のa〜e・f〜jはそれぞれ内部でつながっています。</div>
         ${lesson.circuitSteps.map(cs => {
           const wireColor = cs.wire === '赤' ? '#e53935' : cs.wire === '黒' ? '#424242' : cs.wire === '白' ? '#888' : cs.wire === '黄' ? '#f9a825' : cs.wire === '青' ? '#1565c0' : cs.wire === '緑' ? '#2e7d32' : 'var(--primary)';
