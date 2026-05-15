@@ -1245,56 +1245,57 @@ async function showUnitLesson(subjectId, unitId) {
   document.getElementById('sheet').scrollTop = 0;
 
   const level = s.level ? `\n学習者のレベル: ${s.level}` : '';
-  const prompt = `あなたは、完全な初心者でも理解できるよう丁寧に教えることが得意な講師です。
-科目「${s.name}」（目標: ${s.goal}）の単元「${u.name}」を教えてください。${level}
+  const prompt = `あなたは「デバイスプラス」レベルの丁寧な技術解説記事を書く専門家です。
+科目「${s.name}」（目標: ${s.goal}）の単元「${u.name}」を、この分野を完全に初めて触る人向けに解説してください。${level}
 
-【絶対に守るルール】
-1. 専門用語を使う場合は、必ずその直後に「＝〇〇のこと」「たとえば〜」で噛み砕いて説明する
-2. 「なぜそれが必要か」を必ず先に説明してから「何か」を説明する
-3. 抽象的な説明は禁止。必ず身近なものに例える（例:「抵抗は水道の蛇口と同じで、電気の流れる量を絞る部品」）
-4. ステップは「この操作をすると画面/現物がどう変わるか」まで書く
-5. 初めてその分野を触る人が読んでも一人で進められる粒度にする
+【品質基準: デバイスプラス（deviceplus.jp）の記事レベルを目指すこと】
+- 部品の外見・向き・触り方まで書く（例:「LEDの足は2本あり、長い方がアノード＝プラス側です」）
+- なぜその操作が必要か、省いたらどうなるかを必ず書く
+- コードは省略せず全文書き、各行にコメントで何をしているか説明する
+- 失敗したときの症状と対処法を具体的に書く（例:「LEDが光らない場合→向きが逆の可能性。長い足側がArduinoのピン側になっているか確認」）
+- 数値には必ず単位と理由を添える（例:「220Ω：5V÷0.02A=250Ωなので余裕を持たせて220Ω」）
 
 以下のJSON形式のみで回答してください（説明文不要）:
 {
-  "summary": "①この単元で何ができるようになるか、②なぜ今これを学ぶのか、③身近な例で言うと何か（各1文ずつ、合計3文）",
+  "summary": "①この単元を終えると何が作れる/動かせるか、②なぜこれを学ぶと後で役立つか、③全く知識がない人向けに身近なものでたとえると（各1〜2文ずつ）",
   "isHardware": false,
   "imageQuery": "日本語Wikipediaで画像検索するための最適なキーワード（1〜3語）",
-  "videoQuery": "YouTubeで検索する日本語クエリ（具体的に・例: C言語 変数 入門 解説）",
-  "objectives": ["〜できるようになる（具体的な動作レベルで）","目標2","目標3"],
-  "partsNeeded": ["部品名: 役割の一言説明（例: 220Ω抵抗: 電流を制限してLEDを壊さないため）"],
+  "videoQuery": "YouTubeで検索する日本語クエリ（例: Arduino LED 点灯 回路 初心者 作り方）",
+  "objectives": ["この単元を終えると〜できる（動作レベルで具体的に）","目標2","目標3"],
+  "partsNeeded": ["部品名 × 個数: なぜ必要か・どこで買えるか（例: 220Ω抵抗 × 1本: LEDに流れる電流を制限するため。秋月電子やAmazonで購入可）"],
   "steps": [
     {
-      "title": "ステップのタイトル（動詞から始める）",
-      "description": "何を・どこに・どうするか を具体的に。ハードウェアなら『Arduinoの13番ピン（基板に番号が印字されている）からジャンパ線を1本取り出し…』レベル。ソフトウェアなら実際に入力するコードを含む。",
-      "tip": "初心者がここで詰まりやすいポイントと、その解決法"
+      "title": "ステップタイトル（動詞+目的語。例:「Arduino IDEをインストールする」）",
+      "description": "【何をするか】具体的な操作を書く。\n【なぜするか】この操作が必要な理由。\n【どうなるか】操作後に何が起きるか・何が見えるか。\nハードウェアなら部品の向き・差し込む穴の番号まで明記。ソフトウェアなら実際に入力するコードを全文記載し各行にコメントを付ける。",
+      "tip": "【よくある失敗】具体的な症状。【原因】なぜそうなるか。【対処法】どうすれば直るか。"
     }
   ],
-  "circuitDiagram": "ハードウェア単元のみ: ASCIIアートで配線図を描く。例: 5V ---[220Ω]---[LED+]---[LED-]--- GND",
+  "circuitDiagram": "ハードウェア単元のみ: 全部品を含む完全な配線図をASCIIアートで描く。各部品の向きや接続先を明記する。",
   "concepts": [
     {
-      "title": "用語名（読み方）",
-      "body": "まず一言で言うと何か。次にもう少し詳しく。最後に『つまり〜』でまとめる。（全体で120字前後）",
-      "example": "実際のコード例 or 『たとえるなら〜』という具体例。コードの場合は動作するものを書く"
+      "title": "用語名（よみがな）",
+      "body": "【一言で言うと】〜のこと。【もう少し詳しく】〜。【身近な例で言うと】〜と同じしくみ。【なぜ重要か】〜がないと〜になるため。",
+      "example": "コード例（全文・コメント付き）または図解テキスト。コードは必ずそのままコピペで動くものを書く。"
     }
   ],
   "exercises": [
-    {"question": "実際に手を動かして確認できる問題（答えが一意に定まるもの）", "answer": "完全な模範解答。コードなら動くコードを書く"},
+    {"question": "手を動かして答える問題（測定値・実行結果・作成物など答えが確認できるもの）", "answer": "模範解答（コードなら全文。数値なら計算過程も含む）"},
     {"question": "問題2", "answer": "解答2"},
     {"question": "問題3", "answer": "解答3"}
   ],
   "quiz": [
-    {"q": "問題文（この単元の核心を問う）", "choices": ["選択肢A","選択肢B","選択肢C","選択肢D"], "answer": 0},
+    {"q": "この単元の最重要ポイントを問う4択", "choices": ["選択肢A","選択肢B","選択肢C","選択肢D"], "answer": 0},
     {"q": "クイズ2", "choices": ["A","B","C","D"], "answer": 1},
     {"q": "クイズ3", "choices": ["A","B","C","D"], "answer": 2}
   ],
-  "nextStep": "この単元を終えたら次に何をすべきか。『次は〇〇を学ぶと、今回の知識が△△に活きます』の形で（1〜2文）"
+  "nextStep": "次は〇〇を学ぶと、今回の〇〇の知識が〇〇に直結して活きます（具体的に1〜2文）"
 }
 
-追加指示:
-- isHardware: ブレッドボード/回路/配線/マイコン/センサー/抵抗/はんだ等の物理作業を含むならtrue
-- steps: 必ず6〜8ステップ。1ステップ＝1操作。まとめて書かない
-- partsNeeded: ハードウェアのみ。部品名だけでなく「何のために使うか」を必ず添える`;
+絶対に守ること:
+- isHardware: 物理的な部品・配線・はんだ付けを含むならtrue
+- steps: 7〜10ステップ。1ステップ＝1つの操作のみ。description は必ず「何をするか/なぜするか/どうなるか」の3要素を含む
+- concepts: この単元で登場する専門用語を全て網羅する（最低3個）
+- コードは必ず動作する完全なものを書く。「〜を書く」だけでは不可`;
 
   try {
     const [aiData, imgSrc] = await Promise.all([
@@ -1365,9 +1366,9 @@ async function showUnitLesson(subjectId, unitId) {
           <div style="display:flex;gap:10px;margin-bottom:10px">
             <div style="width:28px;height:28px;border-radius:50%;background:var(--primary);color:white;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;margin-top:2px">${i+1}</div>
             <div style="flex:1;background:var(--card);border-radius:12px;padding:10px 12px;border:1.5px solid var(--border)">
-              <div style="font-size:13px;font-weight:700;margin-bottom:4px">${step.title}</div>
-              <div style="font-size:13px;line-height:1.6;color:var(--text)">${step.description}</div>
-              ${step.tip ? `<div style="margin-top:6px;padding:6px 8px;background:#fff8f0;border-radius:8px;font-size:11px;color:#e17055;line-height:1.5">💡 ${step.tip}</div>` : ''}
+              <div style="font-size:13px;font-weight:700;margin-bottom:6px">${step.title}</div>
+              <div style="font-size:13px;line-height:1.8;color:var(--text);white-space:pre-line">${step.description}</div>
+              ${step.tip ? `<div style="margin-top:8px;padding:8px 10px;background:#fff8f0;border-radius:8px;font-size:12px;color:#e17055;line-height:1.6;white-space:pre-line">⚠️ ${step.tip}</div>` : ''}
             </div>
           </div>`).join('')}
       </div>` : ''}
