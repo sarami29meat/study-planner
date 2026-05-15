@@ -1,4 +1,4 @@
-const CACHE = 'studypath-v1';
+const CACHE = 'studypath-v2';
 const ASSETS = ['/', '/index.html', '/style.css', '/app.js', '/manifest.json', '/icon-192.png'];
 
 self.addEventListener('install', e => {
