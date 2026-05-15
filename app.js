@@ -108,15 +108,30 @@ function renderHome() {
   const { geminiApiKey, groqApiKey, workerUrl } = state.data.settings;
   const aiEnabled = geminiApiKey || groqApiKey || workerUrl;
 
-  // Today's schedule entries
+  // Auto-rebuild stale schedules (unit IDs may have changed after AI plan regen)
+  let homeScheduleChanged = false;
+  subjects.forEach(s => {
+    if (s.units.length > 0) {
+      const unitIdSet = new Set(s.units.map(u => u.id));
+      const isStale = (s.schedule || []).some(e => !unitIdSet.has(e.unitId));
+      if (isStale || !s.schedule || s.schedule.length === 0) {
+        s.schedule = generateSchedule(s);
+        homeScheduleChanged = true;
+      }
+    }
+  });
+  if (homeScheduleChanged) saveData(state.data);
+
+  // Today's schedule entries (only valid unit IDs)
   const todaySchedule = [];
   subjects.forEach(s => {
-    (s.schedule || []).filter(e => e.date === today()).forEach(e => {
+    const unitIdSet = new Set(s.units.map(u => u.id));
+    (s.schedule || []).filter(e => e.date === today() && unitIdSet.has(e.unitId)).forEach(e => {
       todaySchedule.push({ subjectId: s.id, unitId: e.unitId, subjectName: s.name, unitName: e.unitName, minutes: e.minutes });
     });
   });
 
-  // Fallback: current unit per subject if no schedule
+  // Fallback: current unit per subject if no schedule for today
   const todayTasks = todaySchedule.length > 0 ? todaySchedule : subjects.flatMap(s => {
     const u = currentUnit(s);
     if (!u) return [];
@@ -1174,7 +1189,10 @@ async function fetchWikipediaImage(query) {
 async function showUnitLesson(subjectId, unitId) {
   const s = state.data.subjects.find(s => s.id === subjectId);
   const u = s?.units.find(u => u.id === unitId);
-  if (!s || !u) return;
+  if (!s || !u) {
+    showToast('単元が見つかりません。ホームに戻り直してみてください。');
+    return;
+  }
 
   // Show sheet in lesson mode
   showSheet(`
