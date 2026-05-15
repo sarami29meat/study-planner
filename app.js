@@ -1391,7 +1391,7 @@ function checkQuiz(quizIdx, choiceIdx, correctIdx) {
 
 function closeLessonMode(subjectId, unitId) {
   document.getElementById('sheet').classList.remove('lesson-mode');
-  showUnitDetail(subjectId, unitId);
+  showUnitPicker(subjectId);
 }
 
 function updateUnit(subjectId, unitId) {
