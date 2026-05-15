@@ -184,14 +184,14 @@ function renderHome() {
         <div style="font-size:13px;opacity:0.85;margin-bottom:2px">今日学ぶこと</div>
         <div style="font-size:20px;font-weight:700;margin-bottom:2px;line-height:1.3">${first.unitName}</div>
         <div style="font-size:13px;opacity:0.75;margin-bottom:16px">${first.subjectName} · ${minutesToHM(first.minutes)}</div>
-        <button onclick="showUnitLesson('${first.subjectId}','${first.unitId}')"
+        <button onclick="showUnitPicker('${first.subjectId}')"
           style="background:white;color:var(--primary);border:none;border-radius:14px;padding:14px;font-size:16px;font-weight:700;cursor:pointer;width:100%;display:flex;align-items:center;justify-content:center;gap:8px">
           <span>🎓</span> 学習を開始する
         </button>
         ${todayTasks.length > 1 ? `
         <div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.2)">
           ${todayTasks.slice(1).map(t => `
-            <div onclick="showUnitLesson('${t.subjectId}','${t.unitId}')" style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer">
+            <div onclick="showUnitPicker('${t.subjectId}')" style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer">
               <div style="width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,0.5)"></div>
               <div style="font-size:13px;opacity:0.85;flex:1">${t.subjectName} — ${t.unitName}</div>
               <div style="font-size:12px;opacity:0.65">${minutesToHM(t.minutes)}</div>
@@ -1132,6 +1132,40 @@ function addUnit(subjectId) {
   hideSheet();
   renderDetail();
   showToast('✓ 単元を追加しました');
+}
+
+// ── Unit Picker Sheet ─────────────────────
+function showUnitPicker(subjectId) {
+  const s = state.data.subjects.find(s => s.id === subjectId);
+  if (!s) return;
+  const sorted = [...s.units].sort((a, b) => a.order - b.order);
+  const statusLabel = { not_started: '未着手', in_progress: '学習中', completed: '完了' };
+  const statusColor = { not_started: 'var(--subtext)', in_progress: 'var(--primary)', completed: '#00b894' };
+  const statusIcon  = { not_started: '○', in_progress: '▶', completed: '✓' };
+
+  showSheet(`
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <button onclick="hideSheet()" style="background:none;border:none;font-size:22px;cursor:pointer;padding:0;line-height:1;color:var(--primary)">←</button>
+      <div>
+        <div style="font-size:17px;font-weight:700">${s.name}</div>
+        <div style="font-size:12px;color:var(--subtext)">単元を選んで学習を開始</div>
+      </div>
+    </div>
+    ${sorted.map(u => `
+      <div onclick="showUnitLesson('${s.id}','${u.id}')"
+        style="display:flex;align-items:center;gap:12px;padding:12px;border-radius:14px;background:var(--bg);margin-bottom:8px;cursor:pointer;border:1.5px solid var(--border)">
+        <div style="width:32px;height:32px;border-radius:50%;background:${u.status==='completed'?'#d4f5ed':u.status==='in_progress'?'#f0eeff':'var(--card)'};display:flex;align-items:center;justify-content:center;font-size:16px;color:${statusColor[u.status]||'var(--subtext)'};font-weight:700;flex-shrink:0">
+          ${statusIcon[u.status]||'○'}
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:14px;line-height:1.3">${u.name}</div>
+          <div style="font-size:12px;color:${statusColor[u.status]||'var(--subtext)'};margin-top:2px">
+            ${statusLabel[u.status]||'未着手'}${u.estimatedHours ? ' · ' + u.estimatedHours + '時間' : ''}
+          </div>
+        </div>
+        <div style="color:var(--subtext);font-size:18px">›</div>
+      </div>`).join('')}
+  `);
 }
 
 // ── Unit Detail Sheet ────────────────────
