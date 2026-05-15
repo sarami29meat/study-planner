@@ -1227,6 +1227,22 @@ async function fetchWikipediaImage(query) {
   } catch { return null; }
 }
 
+// Wikimedia Commons から回路図・ブレッドボード配線画像を検索
+async function fetchCommonsImage(query) {
+  try {
+    const url = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(query)}&gsrnamespace=6&gsrlimit=5&prop=imageinfo&iiprop=url|mime|size&iiurlwidth=600&format=json&origin=*`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const pages = Object.values(data.query?.pages || {});
+    // 画像ファイルのみ、SVG/PNG/JPGを優先
+    const imgs = pages
+      .map(p => p.imageinfo?.[0])
+      .filter(ii => ii && ii.mime && ii.mime.startsWith('image/') && !ii.mime.includes('svg'))
+      .sort((a, b) => (b.width || 0) - (a.width || 0));
+    return imgs[0]?.thumburl || imgs[0]?.url || null;
+  } catch { return null; }
+}
+
 async function showUnitLesson(subjectId, unitId) {
   const s = state.data.subjects.find(s => s.id === subjectId);
   const u = s?.units.find(u => u.id === unitId);
@@ -1260,6 +1276,7 @@ async function showUnitLesson(subjectId, unitId) {
   "summary": "①この単元を終えると何が作れる/動かせるか、②なぜこれを学ぶと後で役立つか、③全く知識がない人向けに身近なものでたとえると（各1〜2文ずつ）",
   "isHardware": false,
   "imageQuery": "日本語Wikipediaで画像検索するための最適なキーワード（1〜3語）",
+  "circuitImageQuery": "Wikimedia Commonsでブレッドボード配線図を検索するための英語クエリ（例: Arduino LED breadboard Fritzing, resistor breadboard circuit）。ハードウェア単元のみ。不要なら空文字。",
   "videoQuery": "YouTubeで検索する日本語クエリ（例: Arduino LED 点灯 回路 初心者 作り方）",
   "objectives": ["この単元を終えると〜できる（動作レベルで具体的に）","目標2","目標3"],
   "partsNeeded": ["部品名 × 個数: なぜ必要か・どこで買えるか（例: 220Ω抵抗 × 1本: LEDに流れる電流を制限するため。秋月電子やAmazonで購入可）"],
@@ -1305,15 +1322,26 @@ async function showUnitLesson(subjectId, unitId) {
 
     const text = aiData.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
     const lesson = parseJSON(text);
+    const isHW = lesson.isHardware === true;
 
-    // If AI suggested a better image query and we got no image, try that
+    // メイン画像: Wikipedia → AIのimageQuery順にフォールバック
     let finalImg = imgSrc;
     if (!finalImg && lesson.imageQuery) {
       finalImg = await fetchWikipediaImage(lesson.imageQuery);
     }
 
+    // 回路・配線画像: ハードウェア単元はCommonsから専用取得
+    let circuitImg = null;
+    if (isHW) {
+      const cQuery = lesson.circuitImageQuery || `${u.name} breadboard circuit`;
+      circuitImg = await fetchCommonsImage(cQuery);
+      // フォールバック: 英語の汎用クエリ
+      if (!circuitImg) {
+        circuitImg = await fetchCommonsImage(`Arduino breadboard ${u.name}`);
+      }
+    }
+
     const ytQuery = encodeURIComponent(lesson.videoQuery || `${u.name} ${s.name} 解説`);
-    const isHW = lesson.isHardware === true;
 
     document.getElementById('sheet-content').innerHTML = `
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
@@ -1373,12 +1401,17 @@ async function showUnitLesson(subjectId, unitId) {
           </div>`).join('')}
       </div>` : ''}
 
-      ${isHW && lesson.circuitDiagram ? `
+      ${isHW ? `
       <div style="margin-bottom:16px">
-        <div style="font-size:14px;font-weight:700;margin-bottom:10px">📐 回路図</div>
+        <div style="font-size:14px;font-weight:700;margin-bottom:10px">📐 配線図・回路図</div>
+        ${circuitImg ? `
+        <img src="${circuitImg}" alt="${u.name} 配線図"
+          style="width:100%;border-radius:12px;object-fit:contain;max-height:260px;background:#f8f8f8;margin-bottom:10px">
+        <div style="font-size:11px;color:var(--subtext);margin-bottom:10px;text-align:center">↑ 実際の配線イメージ（Wikimedia Commons）</div>` : ''}
+        ${lesson.circuitDiagram ? `
         <div style="background:#1a1a2e;border-radius:12px;padding:14px;overflow-x:auto">
           <pre style="font-family:monospace;font-size:12px;color:#a29bfe;line-height:1.8;margin:0;white-space:pre-wrap;word-break:break-all">${lesson.circuitDiagram}</pre>
-        </div>
+        </div>` : ''}
       </div>` : ''}
 
       ${lesson.concepts?.length ? `
