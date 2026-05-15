@@ -396,6 +396,54 @@ html, body {
 /* ── Divider ── */
 .divider { height: 1px; background: var(--border); margin: 4px 0; }
 
+/* ── API Key Banner ── */
+.api-key-banner {
+  margin: 12px 16px 0;
+  background: linear-gradient(135deg, #fff8e1, #fff3cd);
+  border-radius: 16px; padding: 14px 16px;
+  display: flex; align-items: center; gap: 12px;
+  cursor: pointer; border: 1.5px solid #ffd000;
+  box-shadow: 0 2px 12px rgba(255,208,0,0.2);
+}
+.api-key-banner-icon { font-size: 26px; flex-shrink: 0; }
+.api-key-banner-body { flex: 1; }
+.api-key-banner-title { font-weight: 700; font-size: 14px; color: #5c4800; }
+.api-key-banner-sub { font-size: 12px; color: #7a6000; margin-top: 2px; }
+.api-key-banner-arrow { font-size: 22px; color: #7a6000; font-weight: 700; }
+
+/* ── Today empty CTA ── */
+.today-empty-cta { padding: 4px 0; }
+.today-add-btn {
+  background: rgba(255,255,255,0.2);
+  border: 1.5px solid rgba(255,255,255,0.6);
+  color: white; border-radius: 12px;
+  padding: 10px 18px; font-size: 14px; font-weight: 600;
+  cursor: pointer; width: 100%; text-align: center;
+}
+.today-add-btn:active { opacity: 0.8; }
+
+/* ── AI Omakase Card ── */
+.ai-omakase-card {
+  display: flex; align-items: flex-start; gap: 14px;
+  background: linear-gradient(135deg, #f0eeff, #e8e3ff);
+  border-radius: 14px; padding: 16px;
+  cursor: pointer; border: 1.5px solid var(--primary-light);
+  margin: 8px 0;
+  transition: transform 0.15s;
+}
+.ai-omakase-card:active { transform: scale(0.98); }
+.ai-omakase-icon { font-size: 36px; flex-shrink: 0; line-height: 1; }
+.ai-omakase-body { flex: 1; }
+.ai-omakase-title { font-size: 16px; font-weight: 700; color: var(--primary-dark); margin-bottom: 6px; }
+.ai-omakase-desc { font-size: 13px; color: var(--subtext); line-height: 1.5; margin-bottom: 12px; }
+.ai-omakase-btn {
+  display: inline-flex; align-items: center;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: white; border-radius: 10px; padding: 9px 16px;
+  font-size: 14px; font-weight: 600;
+  box-shadow: 0 3px 10px rgba(108,92,231,0.35);
+}
+
 /* ── Util ── */
 .hidden { display: none !important; }
 .mt4 { margin-top: 4px; }

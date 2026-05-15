@@ -115,13 +115,13 @@ function renderHome() {
 
   if (!state.data.settings.geminiApiKey) {
     html += `
-      <div onclick="navigate('settings')" style="margin:12px 16px 0;background:#fff3cd;border-radius:14px;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer;border:1.5px solid #ffd000">
-        <div style="font-size:24px">🤖</div>
-        <div style="flex:1">
-          <div style="font-weight:700;font-size:14px">AI機能を有効にしよう</div>
-          <div style="font-size:12px;color:#7a6000;margin-top:2px">タップして無料のAIキーを設定（3ステップで完了）</div>
+      <div onclick="navigate('settings')" class="api-key-banner">
+        <div class="api-key-banner-icon">🤖</div>
+        <div class="api-key-banner-body">
+          <div class="api-key-banner-title">AI機能を有効にしよう</div>
+          <div class="api-key-banner-sub">タップして無料のAPIキーを設定（3ステップ・無料）</div>
         </div>
-        <div style="color:#7a6000;font-size:18px">›</div>
+        <div class="api-key-banner-arrow">›</div>
       </div>`;
   }
 
@@ -139,7 +139,13 @@ function renderHome() {
                 <div class="today-task-time">${t.hours}時間</div>
               </div>
             `).join('')}
-          </div>` : `<div class="today-empty">科目タブから科目を追加してください</div>`}
+          </div>` : subjects.length === 0 ? `
+          <div class="today-empty-cta">
+            <div style="font-size:13px;opacity:0.9;margin-bottom:10px">科目を追加するだけで、AIが学習プランを自動作成します</div>
+            <button class="today-add-btn" onclick="navigate('subjects');setTimeout(showAddSubject,100)">
+              ＋ 最初の科目を追加する
+            </button>
+          </div>` : `<div class="today-empty">学習を記録すると今日のタスクが表示されます</div>`}
       </div>
   `;
 
@@ -211,9 +217,12 @@ function renderSubjects() {
     html += `
       <div class="empty-state">
         <div class="empty-icon">📚</div>
-        <div class="empty-title">科目がありません</div>
-        <div class="empty-sub">右上の＋ボタンで科目を追加してください。<br>AIが最適な学習プランを作ります。</div>
-        <button class="btn btn-primary mt16" onclick="showAddSubject()">科目を追加</button>
+        <div class="empty-title">まず科目を追加してみよう！</div>
+        <div class="empty-sub">科目名・目標・期限を入れるだけで、<br><strong>AIが単元・学習順序・勉強法を自動で作成</strong>します。</div>
+        <button class="btn btn-primary mt16" onclick="showAddSubject()" style="font-size:16px;padding:14px 28px">
+          ✨ 最初の科目を追加する
+        </button>
+        <div style="font-size:12px;color:var(--subtext);margin-top:8px">無料で使えます・登録不要</div>
       </div>`;
   } else {
     subjects.forEach(s => {
@@ -291,10 +300,11 @@ function renderDetail() {
       </div>
     </div>
 
+    ${s.units.length > 0 ? `
     <button class="detail-ai-btn" onclick="runAIPlan('${s.id}')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-      ${s.aiPlan ? 'AIプランを再生成' : 'AIで学習プランを作成'}
-    </button>`;
+      AIプランを再生成
+    </button>` : ''}`;
 
   if (s.aiPlan?.overview) {
     html += `
@@ -320,7 +330,15 @@ function renderDetail() {
       </div>`;
 
   if (sorted.length === 0) {
-    html += `<div class="text-small text-center" style="padding:20px 0">単元を追加してください</div>`;
+    html += `
+      <div class="ai-omakase-card" onclick="runAIPlan('${s.id}')">
+        <div class="ai-omakase-icon">🤖</div>
+        <div class="ai-omakase-body">
+          <div class="ai-omakase-title">AIにおまかせで学習プランを作成</div>
+          <div class="ai-omakase-desc">タップするだけで、この科目に必要な単元・学習順序・勉強法をAIが自動で作成します</div>
+          <div class="ai-omakase-btn">✨ AIプランを作成する（無料）</div>
+        </div>
+      </div>`;
   } else {
     sorted.forEach((u, i) => {
       const logged = totalLoggedMinutes(s.id, u.id);
@@ -644,6 +662,9 @@ function showAddSubject() {
   const def = getDefaultDeadline();
   showSheet(`
     <div class="sheet-title">科目を追加</div>
+    <div style="background:#f0eeff;border-radius:12px;padding:12px 14px;margin-bottom:16px;font-size:13px;color:var(--primary);line-height:1.5">
+      🤖 追加するだけで<strong>AIが単元・学習順序・勉強法を自動作成</strong>します
+    </div>
     <div class="form-group">
       <label class="form-label">科目名</label>
       <input type="text" class="form-input" id="ns-name" placeholder="例: 英語、数学、プログラミング">
@@ -662,16 +683,7 @@ function showAddSubject() {
         <input type="number" class="form-input" id="ns-hours" value="2" min="0.5" max="12" step="0.5">
       </div>
     </div>
-    <div class="form-group">
-      <div class="flex-between mb8">
-        <label class="form-label" style="margin-bottom:0">学習単元（1行ずつ）</label>
-        <button class="btn btn-secondary" style="padding:5px 10px;font-size:12px" onclick="suggestUnitsAI()">
-          ✨ AIに提案してもらう
-        </button>
-      </div>
-      <textarea class="form-textarea" id="ns-units" placeholder="空欄でもOK。AIボタンで自動生成できます。&#10;または手動で1行ずつ入力：&#10;文法&#10;語彙&#10;リスニング" style="height:120px"></textarea>
-    </div>
-    <button class="btn btn-primary btn-full" onclick="addSubject()">追加する</button>
+    <button class="btn btn-primary btn-full" onclick="addSubject()">追加してAIプランを自動作成 →</button>
   `);
 }
 
@@ -686,23 +698,14 @@ function addSubject() {
   const goal = document.getElementById('ns-goal').value.trim();
   const deadline = getDateFromSelects('ns-dl');
   const hoursPerDay = parseFloat(document.getElementById('ns-hours').value) || 2;
-  const unitsRaw = document.getElementById('ns-units').value;
 
   if (!name) { showToast('科目名を入力してください'); return; }
   if (!goal) { showToast('目標を入力してください'); return; }
   if (!deadline) { showToast('期限を入力してください'); return; }
 
-  const units = unitsRaw.split('\n')
-    .map(l => l.trim()).filter(Boolean)
-    .map((name, i) => ({
-      id: uid(), name, order: i,
-      estimatedHours: 0, studyMethod: '',
-      status: 'not_started'
-    }));
-
   const subject = {
     id: uid(), name, goal, deadline, hoursPerDay,
-    createdAt: Date.now(), units, aiPlan: null
+    createdAt: Date.now(), units: [], aiPlan: null
   };
 
   state.data.subjects.push(subject);
@@ -710,6 +713,11 @@ function addSubject() {
   hideSheet();
   navigate('detail', { subjectId: subject.id });
   showToast('✓ 科目を追加しました');
+
+  // APIキーが設定済みなら自動でAIプラン生成
+  if (state.data.settings.geminiApiKey) {
+    setTimeout(() => runAIPlan(subject.id), 400);
+  }
 }
 
 // ── Add Unit Sheet ────────────────────────
