@@ -1389,19 +1389,22 @@ async function showUnitLesson(subjectId, unitId) {
   "summary": "①この単元を終えると何が作れる/動かせるか、②なぜこれを学ぶと後で役立つか、③全く知識がない人向けに身近なものでたとえると（各1〜2文ずつ）",
   "isHardware": false,
   "imageQuery": "日本語Wikipediaで画像検索するための最適なキーワード（1〜3語）",
-  "circuitLayout": {
-    "title": "回路名（例: LED点灯回路 D13ピン使用）",
-    "rows": 15,
-    "components": [
-      {"type": "led", "label": "赤LED", "color": "#ff3333", "pin1": "3-f", "pin2": "5-f"},
-      {"type": "resistor", "label": "220Ω", "color": "#c8921a", "pin1": "5-h", "pin2": "8-h"}
-    ],
-    "wires": [
-      {"from": "D13", "to": "3-j", "color": "#ff3333", "label": "D13"},
-      {"from": "3-a", "to": "3-j", "color": "#ff3333"},
-      {"from": "8-a", "to": "GND", "color": "#333333", "label": "GND"}
-    ]
-  },
+  "circuitSteps": [
+    {
+      "step": 1,
+      "from": "Arduino D13ピン",
+      "to": "ブレッドボード 5行 j列",
+      "wire": "赤",
+      "note": "D13ピンは基板右側に番号が印字されている"
+    },
+    {
+      "step": 2,
+      "from": "LED アノード（長い足・+側）",
+      "to": "ブレッドボード 5行 f列",
+      "wire": "なし（部品の足をそのまま差す）",
+      "note": "長い足がプラス側。向きを間違えると光らない"
+    }
+  ],
   "videoQuery": "YouTubeで検索する日本語クエリ（例: Arduino LED 点灯 回路 初心者 作り方）",
   "objectives": ["この単元を終えると〜できる（動作レベルで具体的に）","目標2","目標3"],
   "partsNeeded": ["部品名 × 個数: なぜ必要か・どこで買えるか（例: 220Ω抵抗 × 1本: LEDに流れる電流を制限するため。秋月電子やAmazonで購入可）"],
@@ -1438,7 +1441,7 @@ async function showUnitLesson(subjectId, unitId) {
 - steps: 7〜10ステップ。1ステップ＝1つの操作のみ。description は必ず「何をするか/なぜするか/どうなるか」の3要素を含む
 - concepts: この単元で登場する専門用語を全て網羅する（最低3個）
 - コードは必ず動作する完全なものを書く。「〜を書く」だけでは不可
-- circuitLayout（ハードウェアのみ）: ブレッドボードの行1〜25・列a〜j（a-eが左側、f-jが右側）で部品位置を正確に指定。配線色は電源=赤(#e53935)・GND=黒(#333333)・信号=紫(#7b1fa2)。Arduinoピンは"D2"〜"D13"/"5V"/"GND"/"3V3"で指定`;
+- circuitSteps（ハードウェアのみ）: 配線を1接続ずつ、fromとtoで「Arduinoのどのピン」「ブレッドボードの何行何列」を正確に記述。ブレッドボードは行1〜30・列a〜j（a-eが左ゾーン、f-jが右ゾーン、同じ行のa-eはつながっている）。部品の足もfromかtoに含める。noteには初心者が見落としやすい注意点を書く`;
 
   try {
     const [aiData, imgSrc] = await Promise.all([
@@ -1456,18 +1459,8 @@ async function showUnitLesson(subjectId, unitId) {
       finalImg = await fetchWikipediaImage(lesson.imageQuery);
     }
 
-    // 回路・配線図: circuitLayout → JS レンダラーで SVG 生成
     let circuitImg = null;
     let circuitSVG = null;
-    if (isHW) {
-      if (lesson.circuitLayout) {
-        circuitSVG = drawBreadboardSVG(lesson.circuitLayout);
-      }
-      // SVG生成失敗時はCommonsフォールバック
-      if (!circuitSVG) {
-        circuitImg = await fetchCommonsImage(`Arduino ${u.name} breadboard Fritzing`);
-      }
-    }
 
     const ytQuery = encodeURIComponent(lesson.videoQuery || `${u.name} ${s.name} 解説`);
 
@@ -1529,20 +1522,32 @@ async function showUnitLesson(subjectId, unitId) {
           </div>`).join('')}
       </div>` : ''}
 
-      ${isHW ? `
+      ${isHW && lesson.circuitSteps?.length ? `
       <div style="margin-bottom:16px">
-        <div style="font-size:14px;font-weight:700;margin-bottom:10px">📐 配線図</div>
-        ${circuitSVG ? `
-        <div style="background:white;border-radius:12px;padding:12px;border:1.5px solid var(--border);overflow:auto;margin-bottom:8px">
-          ${circuitSVG}
-        </div>
-        <div style="font-size:11px;color:var(--subtext);margin-bottom:10px;text-align:center">↑ 配線図（行番号・列記号でブレッドボードの穴位置を示します）</div>` :
-        circuitImg ? `
-        <img src="${circuitImg}" alt="${u.name} 配線図"
-          style="width:100%;border-radius:12px;object-fit:contain;max-height:260px;background:#f8f8f8;margin-bottom:10px">` : ''}
+        <div style="font-size:14px;font-weight:700;margin-bottom:4px">🔌 配線手順</div>
+        <div style="font-size:12px;color:var(--subtext);margin-bottom:10px">順番通りに接続してください。同じ行のa〜e・f〜jはそれぞれ内部でつながっています。</div>
+        ${lesson.circuitSteps.map(cs => {
+          const wireColor = cs.wire === '赤' ? '#e53935' : cs.wire === '黒' ? '#424242' : cs.wire === '白' ? '#888' : cs.wire === '黄' ? '#f9a825' : cs.wire === '青' ? '#1565c0' : cs.wire === '緑' ? '#2e7d32' : 'var(--primary)';
+          const isNoWire = cs.wire && cs.wire.includes('足');
+          return `
+          <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:8px">
+            <div style="width:24px;height:24px;border-radius:50%;background:var(--primary);color:white;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;margin-top:2px">${cs.step}</div>
+            <div style="flex:1;background:var(--card);border-radius:12px;padding:10px 12px;border:1.5px solid var(--border)">
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px">
+                <span style="font-size:13px;font-weight:700;color:var(--text)">${cs.from}</span>
+                <span style="color:var(--subtext)">→</span>
+                <span style="font-size:13px;font-weight:700;color:var(--primary)">${cs.to}</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                ${!isNoWire ? `<span style="background:${wireColor};color:white;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:700">${cs.wire}線</span>` : `<span style="background:#f0f0f0;color:#555;border-radius:10px;padding:2px 8px;font-size:11px">${cs.wire}</span>`}
+                ${cs.note ? `<span style="font-size:11px;color:#e17055">⚠️ ${cs.note}</span>` : ''}
+              </div>
+            </div>
+          </div>`;
+        }).join('')}
         ${lesson.circuitDiagram ? `
-        <details>
-          <summary style="cursor:pointer;font-size:12px;color:var(--primary);font-weight:700;margin-bottom:6px;user-select:none">テキスト回路図を見る</summary>
+        <details style="margin-top:6px">
+          <summary style="cursor:pointer;font-size:12px;color:var(--primary);font-weight:700;user-select:none">補足: テキスト回路図</summary>
           <div style="background:#1a1a2e;border-radius:12px;padding:14px;overflow-x:auto;margin-top:6px">
             <pre style="font-family:monospace;font-size:12px;color:#a29bfe;line-height:1.8;margin:0;white-space:pre-wrap">${lesson.circuitDiagram}</pre>
           </div>
