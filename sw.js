@@ -1,8 +1,8 @@
-const CACHE = 'studypath-v2';
-const ASSETS = ['/', '/index.html', '/style.css', '/app.js', '/manifest.json', '/icon-192.png'];
+const CACHE = 'studypath-v3';
+const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png'];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).catch(() => {}));
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).catch(() => {}));
   self.skipWaiting();
 });
 
@@ -14,7 +14,11 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-  if (e.request.url.includes('googleapis.com')) return; // Don't cache API calls
+  const url = e.request.url;
+  // Always fetch fresh: JS, CSS, API calls
+  if (url.includes('.js') || url.includes('.css') ||
+      url.includes('googleapis.com') || url.includes('groq.com') ||
+      url.includes('wikipedia.org')) return;
   e.respondWith(
     caches.match(e.request).then(r => r || fetch(e.request))
   );
