@@ -1230,16 +1230,17 @@ async function fetchWikipediaImage(query) {
 // Wikimedia Commons から回路図・ブレッドボード配線画像を検索
 async function fetchCommonsImage(query) {
   try {
-    const url = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(query)}&gsrnamespace=6&gsrlimit=5&prop=imageinfo&iiprop=url|mime|size&iiurlwidth=600&format=json&origin=*`;
+    const url = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(query)}&gsrnamespace=6&gsrlimit=8&prop=imageinfo&iiprop=url|mime|size&iiurlwidth=800&format=json&origin=*`;
     const res = await fetch(url);
     const data = await res.json();
     const pages = Object.values(data.query?.pages || {});
-    // 画像ファイルのみ、SVG/PNG/JPGを優先
+    // SVG含む全画像を対象（CommonsがPNGサムネイルを生成してくれる）
     const imgs = pages
       .map(p => p.imageinfo?.[0])
-      .filter(ii => ii && ii.mime && ii.mime.startsWith('image/') && !ii.mime.includes('svg'))
-      .sort((a, b) => (b.width || 0) - (a.width || 0));
-    return imgs[0]?.thumburl || imgs[0]?.url || null;
+      .filter(ii => ii && ii.mime && ii.mime.startsWith('image/'));
+    // thumburlがあればそれを使う（SVG→PNGに変換済み）
+    const best = imgs.find(ii => ii.thumburl) || imgs[0];
+    return best?.thumburl || best?.url || null;
   } catch { return null; }
 }
 
@@ -1276,7 +1277,7 @@ async function showUnitLesson(subjectId, unitId) {
   "summary": "①この単元を終えると何が作れる/動かせるか、②なぜこれを学ぶと後で役立つか、③全く知識がない人向けに身近なものでたとえると（各1〜2文ずつ）",
   "isHardware": false,
   "imageQuery": "日本語Wikipediaで画像検索するための最適なキーワード（1〜3語）",
-  "circuitImageQuery": "Wikimedia Commonsでブレッドボード配線図を検索するための英語クエリ（例: Arduino LED breadboard Fritzing, resistor breadboard circuit）。ハードウェア単元のみ。不要なら空文字。",
+  "circuitImageQuery": "Wikimedia CommonsでFritzing形式のブレッドボード配線図を検索する英語クエリ。必ず『Fritzing』を含め、部品名を具体的に（例: 'Arduino LED breadboard Fritzing', 'Arduino resistor LED circuit Fritzing'）。ハードウェア単元のみ。不要なら空文字。",
   "videoQuery": "YouTubeで検索する日本語クエリ（例: Arduino LED 点灯 回路 初心者 作り方）",
   "objectives": ["この単元を終えると〜できる（動作レベルで具体的に）","目標2","目標3"],
   "partsNeeded": ["部品名 × 個数: なぜ必要か・どこで買えるか（例: 220Ω抵抗 × 1本: LEDに流れる電流を制限するため。秋月電子やAmazonで購入可）"],
@@ -1330,14 +1331,18 @@ async function showUnitLesson(subjectId, unitId) {
       finalImg = await fetchWikipediaImage(lesson.imageQuery);
     }
 
-    // 回路・配線画像: ハードウェア単元はCommonsから専用取得
+    // 回路・配線画像: ハードウェア単元はCommonsのFritzingダイアグラムを取得
     let circuitImg = null;
     if (isHW) {
-      const cQuery = lesson.circuitImageQuery || `${u.name} breadboard circuit`;
-      circuitImg = await fetchCommonsImage(cQuery);
-      // フォールバック: 英語の汎用クエリ
-      if (!circuitImg) {
-        circuitImg = await fetchCommonsImage(`Arduino breadboard ${u.name}`);
+      const queries = [
+        lesson.circuitImageQuery,
+        `Arduino ${u.name} breadboard Fritzing`,
+        `${u.name} circuit breadboard Fritzing`,
+        `Arduino breadboard Fritzing circuit`
+      ].filter(Boolean);
+      for (const q of queries) {
+        circuitImg = await fetchCommonsImage(q);
+        if (circuitImg) break;
       }
     }
 
