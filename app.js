@@ -1628,13 +1628,17 @@ async function runAIPlan(subjectId) {
     {
       "name": "単元名（入力と完全一致させること）",
       "order": 1,
-      "estimatedHours": 10,
-      "studyMethod": "この単元の具体的な学習法（50字程度）"
+      "estimatedHours": 1,
+      "studyMethod": "この単元で実際に何をするか（手を動かす内容を具体的に50字程度）"
     }
   ]
 }
 
-重要: unitsの名前は入力した単元名と完全一致させてください。orderは推奨学習順序(1から)。`;
+重要:
+- unitsの名前は入力した単元名と完全一致させてください
+- orderは推奨学習順序(1から)
+- estimatedHoursは1単元あたり0.5〜2時間が目安（細かい単元なので大きくしすぎない）
+- studyMethodは「〜を読む」ではなく「〜を実際に作る/動かす/書く」という能動的な内容にする`;
 
   try {
     const data = await callGemini(prompt);
@@ -1717,14 +1721,21 @@ async function generateUnitsAndPlan(s) {
 async function fetchSuggestedUnits(subjectName, goal, level = '') {
   const levelLine = level ? `\n学習者の現在のレベル: ${level}（このレベルを前提に、既知の内容は省略・圧縮し、必要な単元から始めること）` : '';
   const prompt = `あなたは優秀な学習コーチです。
-科目「${subjectName}」で「${goal}」を達成するために必要な学習単元を、
-目標達成までの順序で網羅的にリストアップしてください。
-各分野の定番教材・カリキュラムを参考に、抜け漏れなく列挙してください。${levelLine}
+科目「${subjectName}」で「${goal}」を達成するために必要な学習単元を、順序立てて細かく列挙してください。${levelLine}
+
+【単元の粒度ルール】
+- 1単元 = 1つの概念・1つの操作・1つのトピックのみ扱う
+- 1単元あたりの目安: 0.5〜2時間（大きなトピックは複数単元に分割する）
+- 「〇〇の基礎」のような大雑把な単元は禁止。必ず具体的に分割する
+  良い例: 「抵抗とは何か・オームの法則」「LEDの点灯回路を作る」「PWMで明るさを変える」
+  悪い例: 「電子回路の基礎」「センサーの使い方」
+- 専門用語はそのまま使ってよいが、単元名だけで何をするか分かるように書く
+- 合計15〜25単元程度（スコープに応じて）
 
 以下のJSON形式のみで回答してください（説明文不要）:
 {
   "units": [
-    {"name": "単元名（簡潔に）", "estimatedHours": 5}
+    {"name": "単元名（具体的に・動詞か名詞句で）", "estimatedHours": 1}
   ]
 }`;
 
