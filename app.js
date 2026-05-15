@@ -450,6 +450,13 @@ function renderDetail() {
   el.innerHTML = html;
 }
 
+function openLogForUnit(subjectId, unitId) {
+  state.logSubjectId = subjectId;
+  state.logUnitId = unitId;
+  hideSheet();
+  navigate('log');
+}
+
 // ── Log ───────────────────────────────────
 function renderLog() {
   const el = document.getElementById('view-log');
@@ -1353,7 +1360,31 @@ async function showUnitLesson(subjectId, unitId) {
       <div style="background:linear-gradient(135deg,#00b894,#00cec9);border-radius:12px;padding:12px;margin-bottom:16px;color:white">
         <div style="font-size:11px;font-weight:700;opacity:0.85;margin-bottom:4px">🚀 次のステップ</div>
         <div style="font-size:13px;line-height:1.6">${lesson.nextStep}</div>
-      </div>` : ''}`;
+      </div>` : ''}
+
+      <div style="border-top:1.5px solid var(--border);padding-top:16px;margin-top:4px;display:flex;flex-direction:column;gap:10px">
+        ${(() => {
+          const sorted = [...s.units].sort((a, b) => a.order - b.order);
+          const idx = sorted.findIndex(x => x.id === u.id);
+          const nextUnit = sorted[idx + 1] || null;
+          return nextUnit
+            ? `<button onclick="showUnitLesson('${s.id}','${nextUnit.id}')"
+                style="background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:white;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;width:100%">
+                次の単元へ → ${nextUnit.name}
+              </button>`
+            : '';
+        })()}
+        <div style="display:flex;gap:8px">
+          <button onclick="openLogForUnit('${s.id}','${u.id}')"
+            style="flex:1;background:#f0eeff;color:var(--primary);border:none;border-radius:14px;padding:12px;font-size:14px;font-weight:700;cursor:pointer">
+            📝 学習を記録する
+          </button>
+          <button onclick="closeLessonMode('${subjectId}','${unitId}')"
+            style="flex:1;background:var(--card);color:var(--text);border:1.5px solid var(--border);border-radius:14px;padding:12px;font-size:14px;font-weight:600;cursor:pointer">
+            ← 単元一覧
+          </button>
+        </div>
+      </div>`;
 
     document.getElementById('sheet').scrollTop = 0;
   } catch (e) {
