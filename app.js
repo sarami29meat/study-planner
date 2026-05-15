@@ -1336,9 +1336,9 @@ async function showUnitLesson(subjectId, unitId) {
           YouTube
         </a>
         ${isHW ? `
-        <a href="https://falstad.com/circuit/circuitjs.html" target="_blank"
+        <a href="https://www.tinkercad.com/circuits" target="_blank"
           style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;background:#0984e3;color:white;border-radius:12px;padding:10px;text-decoration:none;font-weight:700;font-size:12px">
-          ⚡ 回路シミュレーター
+          ⚡ Tinkercadで試す
         </a>` : ''}
       </div>
 
