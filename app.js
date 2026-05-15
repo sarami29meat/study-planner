@@ -108,7 +108,7 @@ function renderHome() {
     const u = currentUnit(s);
     if (!u) return [];
     const rec = s.aiPlan?.dailyHoursRecommended || 1;
-    return [{ subject: s.name, unit: u.name, method: u.studyMethod, hours: rec }];
+    return [{ subjectId: s.id, unitId: u.id, subject: s.name, unit: u.name, method: u.studyMethod, hours: rec }];
   });
 
   let html = `<div style="padding-bottom:16px">`;
@@ -133,10 +133,13 @@ function renderHome() {
         ${todayTasks.length > 0 ? `
           <div class="today-task-list">
             ${todayTasks.map(t => `
-              <div class="today-task-item">
+              <div class="today-task-item" onclick="showUnitLesson('${t.subjectId}','${t.unitId}')" style="cursor:pointer">
                 <div class="today-task-dot"></div>
-                <div class="today-task-text">${t.subject} — ${t.unit}</div>
-                <div class="today-task-time">${t.hours}時間</div>
+                <div class="today-task-text" style="flex:1">${t.subject} — ${t.unit}</div>
+                <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+                  <div class="today-task-time">${t.hours}h</div>
+                  <div style="background:rgba(255,255,255,0.25);border-radius:20px;padding:3px 10px;font-size:12px;font-weight:700;color:white">学習 ›</div>
+                </div>
               </div>
             `).join('')}
           </div>` : subjects.length === 0 ? `
@@ -895,23 +898,34 @@ async function showUnitLesson(subjectId, unitId) {
     </div>`;
   document.getElementById('sheet').scrollTop = 0;
 
-  const level = s.level ? `\n学習者のレベル: ${s.level}` : '';
-  const prompt = `あなたは優秀な学習コーチです。
-科目「${s.name}」（目標: ${s.goal}）の単元「${u.name}」について学習コンテンツを生成してください。${level}
+  const level = s.level ? `\n学習者のレベル: ${s.level}（このレベルに合わせて内容を調整すること）` : '';
+  const prompt = `あなたは優秀な学習コーチ兼講師です。
+科目「${s.name}」（目標: ${s.goal}）の単元「${u.name}」について、この単元だけで学習が完結できる充実したコンテンツを生成してください。${level}
 
 以下のJSON形式のみで回答してください（説明文不要）:
 {
-  "summary": "この単元で学ぶ内容の概要（2文以内・簡潔に）",
-  "imageQuery": "この単元に関連する画像を日本語Wikipediaで検索するための最適な単語（例: マイクロコントローラ）",
-  "videoQuery": "YouTubeで検索する日本語クエリ（例: 組込プログラミング 入門 C言語）",
-  "keyPoints": ["重要ポイント1","重要ポイント2","重要ポイント3","重要ポイント4","重要ポイント5"],
-  "explanation": "核心となる概念の解説（200字程度・簡潔に）",
-  "exercises": [
-    {"question": "練習問題1", "hint": "ヒント1"},
-    {"question": "練習問題2", "hint": "ヒント2"},
-    {"question": "練習問題3", "hint": "ヒント3"}
+  "summary": "この単元で何を・なぜ学ぶかの概要（3文）",
+  "imageQuery": "日本語Wikipediaで画像検索するための最適なキーワード（1〜3語）",
+  "videoQuery": "YouTubeで検索する日本語クエリ（具体的に・例: C言語 変数 入門 解説）",
+  "objectives": ["学習目標1（〜できる）","学習目標2","学習目標3"],
+  "concepts": [
+    {
+      "title": "概念・用語名",
+      "body": "その概念の詳しい説明（100〜150字）",
+      "example": "具体例・コード例・図解の代わりとなるテキスト（あれば）"
+    }
   ],
-  "resources": ["おすすめ教材・参考書1", "おすすめ教材・参考書2"]
+  "exercises": [
+    {"question": "練習問題（考えさせる問い）", "answer": "模範解答（具体的に）"},
+    {"question": "練習問題2", "answer": "模範解答2"},
+    {"question": "練習問題3", "answer": "模範解答3"}
+  ],
+  "quiz": [
+    {"q": "4択クイズの問題文", "choices": ["選択肢A","選択肢B","選択肢C","選択肢D"], "answer": 0},
+    {"q": "クイズ2", "choices": ["A","B","C","D"], "answer": 1},
+    {"q": "クイズ3", "choices": ["A","B","C","D"], "answer": 2}
+  ],
+  "nextStep": "この単元を終えたら次に何をすべきか（1〜2文）"
 }`;
 
   try {
@@ -932,56 +946,74 @@ async function showUnitLesson(subjectId, unitId) {
     const ytQuery = encodeURIComponent(lesson.videoQuery || `${u.name} ${s.name} 解説`);
 
     document.getElementById('sheet-content').innerHTML = `
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
         <button onclick="closeLessonMode('${subjectId}','${unitId}')"
-          style="background:none;border:none;font-size:22px;cursor:pointer;padding:0;line-height:1">←</button>
-        <div style="font-size:18px;font-weight:700;flex:1">${u.name}</div>
+          style="background:none;border:none;font-size:22px;cursor:pointer;padding:0;line-height:1;color:var(--primary)">←</button>
+        <div style="font-size:17px;font-weight:700;flex:1;line-height:1.3">${u.name}</div>
       </div>
 
-      ${finalImg ? `
-      <img src="${finalImg}" alt="${u.name}"
-        style="width:100%;border-radius:14px;object-fit:cover;max-height:200px;margin-bottom:12px">` : ''}
+      ${finalImg ? `<img src="${finalImg}" alt="${u.name}"
+        style="width:100%;border-radius:14px;object-fit:cover;max-height:180px;margin-bottom:12px">` : ''}
 
       <a href="https://www.youtube.com/results?search_query=${ytQuery}" target="_blank"
-        style="display:flex;align-items:center;gap:10px;background:#ff0000;color:white;border-radius:12px;padding:11px 14px;text-decoration:none;margin-bottom:14px;font-weight:700;font-size:14px">
-        <svg viewBox="0 0 24 24" fill="white" width="20" height="20"><path d="M23.5 6.2a3 3 0 00-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 00.5 6.2C0 8.1 0 12 0 12s0 3.9.5 5.8a3 3 0 002.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 002.1-2.1C24 15.9 24 12 24 12s0-3.9-.5-5.8zM9.7 15.5V8.5l6.3 3.5-6.3 3.5z"/></svg>
-        YouTubeで動画を見る
+        style="display:flex;align-items:center;gap:10px;background:#ff0000;color:white;border-radius:12px;padding:10px 14px;text-decoration:none;margin-bottom:14px;font-weight:700;font-size:13px">
+        <svg viewBox="0 0 24 24" fill="white" width="18" height="18"><path d="M23.5 6.2a3 3 0 00-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 00.5 6.2C0 8.1 0 12 0 12s0 3.9.5 5.8a3 3 0 002.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 002.1-2.1C24 15.9 24 12 24 12s0-3.9-.5-5.8zM9.7 15.5V8.5l6.3 3.5-6.3 3.5z"/></svg>
+        YouTubeで関連動画を見る
       </a>
 
-      <div style="background:#f0eeff;border-radius:12px;padding:12px;margin-bottom:14px">
-        <div style="font-size:11px;font-weight:700;color:var(--primary);margin-bottom:4px">この単元について</div>
-        <div style="font-size:13px;line-height:1.6">${lesson.summary || ''}</div>
+      <div style="background:#f0eeff;border-radius:12px;padding:12px;margin-bottom:16px">
+        <div style="font-size:11px;font-weight:700;color:var(--primary);margin-bottom:5px">📌 この単元について</div>
+        <div style="font-size:13px;line-height:1.7">${lesson.summary || ''}</div>
+        ${lesson.objectives?.length ? `
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+          <div style="font-size:11px;font-weight:700;color:var(--primary);margin-bottom:5px">学習目標</div>
+          ${lesson.objectives.map(o => `<div style="font-size:12px;line-height:1.6">✓ ${o}</div>`).join('')}
+        </div>` : ''}
       </div>
 
-      ${lesson.keyPoints?.length ? `
-      <div style="margin-bottom:14px">
-        <div style="font-size:13px;font-weight:700;margin-bottom:8px">✅ 重要ポイント</div>
-        ${lesson.keyPoints.map(p => `
-          <div style="display:flex;gap:8px;margin-bottom:5px;font-size:13px;line-height:1.5">
-            <span style="color:var(--primary);font-weight:700;flex-shrink:0">•</span><span>${p}</span>
+      ${lesson.concepts?.length ? `
+      <div style="margin-bottom:16px">
+        <div style="font-size:14px;font-weight:700;margin-bottom:10px">📘 重要概念</div>
+        ${lesson.concepts.map(c => `
+          <div style="border:1.5px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px">
+            <div style="font-size:13px;font-weight:700;color:var(--primary);margin-bottom:6px">${c.title}</div>
+            <div style="font-size:13px;line-height:1.7;margin-bottom:${c.example ? '8px' : '0'}">${c.body}</div>
+            ${c.example ? `<div style="background:#f8f8f8;border-radius:8px;padding:8px;font-size:12px;color:var(--subtext);font-family:monospace;line-height:1.6;white-space:pre-wrap">${c.example}</div>` : ''}
           </div>`).join('')}
-      </div>` : ''}
-
-      ${lesson.explanation ? `
-      <div style="margin-bottom:14px">
-        <div style="font-size:13px;font-weight:700;margin-bottom:6px">📘 解説</div>
-        <div style="font-size:13px;line-height:1.7;color:var(--text)">${lesson.explanation}</div>
       </div>` : ''}
 
       ${lesson.exercises?.length ? `
-      <div style="margin-bottom:14px">
-        <div style="font-size:13px;font-weight:700;margin-bottom:8px">✏️ 練習問題</div>
+      <div style="margin-bottom:16px">
+        <div style="font-size:14px;font-weight:700;margin-bottom:10px">✏️ 練習問題</div>
         ${lesson.exercises.map((e, i) => `
-          <div style="background:#f8f8f8;border-radius:10px;padding:11px;margin-bottom:8px">
-            <div style="font-size:13px;font-weight:600;margin-bottom:3px">Q${i+1}. ${e.question}</div>
-            <div style="font-size:12px;color:var(--subtext)">💡 ${e.hint}</div>
+          <div style="background:#f8f8f8;border-radius:12px;padding:12px;margin-bottom:10px">
+            <div style="font-size:13px;font-weight:600;margin-bottom:8px">Q${i+1}. ${e.question}</div>
+            <details style="font-size:12px">
+              <summary style="cursor:pointer;color:var(--primary);font-weight:700;user-select:none">答えを見る</summary>
+              <div style="margin-top:8px;padding:8px;background:white;border-radius:8px;line-height:1.6;color:var(--text)">${e.answer}</div>
+            </details>
           </div>`).join('')}
       </div>` : ''}
 
-      ${lesson.resources?.length ? `
-      <div style="margin-bottom:20px">
-        <div style="font-size:13px;font-weight:700;margin-bottom:6px">📚 おすすめ教材</div>
-        ${lesson.resources.map(r => `<div style="font-size:13px;color:var(--subtext);margin-bottom:4px">• ${r}</div>`).join('')}
+      ${lesson.quiz?.length ? `
+      <div style="margin-bottom:16px">
+        <div style="font-size:14px;font-weight:700;margin-bottom:10px">🧠 理解度チェック</div>
+        ${lesson.quiz.map((q, qi) => `
+          <div style="border:1.5px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px">
+            <div style="font-size:13px;font-weight:600;margin-bottom:10px">Q${qi+1}. ${q.q}</div>
+            <div id="quiz-${qi}-result"></div>
+            ${(q.choices||[]).map((c, ci) => `
+              <button onclick="checkQuiz(${qi},${ci},${q.answer})"
+                style="width:100%;text-align:left;background:#f8f8f8;border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;margin-bottom:6px;font-size:12px;cursor:pointer" id="quiz-${qi}-btn-${ci}">
+                ${['A','B','C','D'][ci]}. ${c}
+              </button>`).join('')}
+          </div>`).join('')}
+      </div>` : ''}
+
+      ${lesson.nextStep ? `
+      <div style="background:linear-gradient(135deg,#00b894,#00cec9);border-radius:12px;padding:12px;margin-bottom:16px;color:white">
+        <div style="font-size:11px;font-weight:700;opacity:0.85;margin-bottom:4px">🚀 次のステップ</div>
+        <div style="font-size:13px;line-height:1.6">${lesson.nextStep}</div>
       </div>` : ''}`;
 
     document.getElementById('sheet').scrollTop = 0;
@@ -990,6 +1022,31 @@ async function showUnitLesson(subjectId, unitId) {
       <div class="sheet-title">${u.name}</div>
       <div style="color:var(--danger);padding:20px 0">エラー: ${e.message}</div>
       <button class="btn btn-secondary btn-full" onclick="closeLessonMode('${subjectId}','${unitId}')">← 戻る</button>`;
+  }
+}
+
+function checkQuiz(quizIdx, choiceIdx, correctIdx) {
+  // Disable all buttons for this question
+  for (let i = 0; i < 4; i++) {
+    const btn = document.getElementById(`quiz-${quizIdx}-btn-${i}`);
+    if (!btn) continue;
+    btn.disabled = true;
+    if (i === correctIdx) {
+      btn.style.background = '#d4f5ed';
+      btn.style.borderColor = '#00b894';
+      btn.style.color = '#00b894';
+      btn.style.fontWeight = '700';
+    } else if (i === choiceIdx && choiceIdx !== correctIdx) {
+      btn.style.background = '#ffeaea';
+      btn.style.borderColor = '#d63031';
+      btn.style.color = '#d63031';
+    }
+  }
+  const result = document.getElementById(`quiz-${quizIdx}-result`);
+  if (result) {
+    result.innerHTML = choiceIdx === correctIdx
+      ? `<div style="color:#00b894;font-weight:700;font-size:13px;margin-bottom:8px">✅ 正解！</div>`
+      : `<div style="color:#d63031;font-weight:700;font-size:13px;margin-bottom:8px">❌ 不正解。正解は ${['A','B','C','D'][correctIdx]} です。</div>`;
   }
 }
 
