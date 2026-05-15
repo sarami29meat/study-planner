@@ -1251,9 +1251,19 @@ async function showUnitLesson(subjectId, unitId) {
 以下のJSON形式のみで回答してください（説明文不要）:
 {
   "summary": "この単元で何を・なぜ学ぶかの概要（3文）",
+  "isHardware": false,
   "imageQuery": "日本語Wikipediaで画像検索するための最適なキーワード（1〜3語）",
   "videoQuery": "YouTubeで検索する日本語クエリ（具体的に・例: C言語 変数 入門 解説）",
   "objectives": ["学習目標1（〜できる）","学習目標2","学習目標3"],
+  "partsNeeded": ["必要な部品・材料（ハードウェア単元のみ。不要なら空配列）"],
+  "steps": [
+    {
+      "title": "ステップのタイトル",
+      "description": "具体的な手順の説明（ハードウェアなら配線・操作手順、ソフトウェアなら実装手順）",
+      "tip": "つまずきやすいポイント・注意点（あれば）"
+    }
+  ],
+  "circuitDiagram": "回路図や配線図をASCIIアートで表現（ハードウェア単元のみ。不要なら空文字）",
   "concepts": [
     {
       "title": "概念・用語名",
@@ -1272,7 +1282,13 @@ async function showUnitLesson(subjectId, unitId) {
     {"q": "クイズ3", "choices": ["A","B","C","D"], "answer": 2}
   ],
   "nextStep": "この単元を終えたら次に何をすべきか（1〜2文）"
-}`;
+}
+
+重要な指示:
+- isHardware: ブレッドボード・回路・配線・マイコン・センサー・抵抗・はんだなど物理的な作業を含む単元はtrue
+- steps: 必ず5〜8ステップで、ハードウェアなら「〇番ピンに△を接続」レベルの具体的な配線手順、ソフトウェアなら実際に書くコードを含む実装手順
+- circuitDiagram: ハードウェア単元では必ずASCIIアートで回路図を描くこと（例: [LED]---[220Ω]---[GND]）
+- partsNeeded: ハードウェア単元では実際に必要な部品を全て列挙すること`;
 
   try {
     const [aiData, imgSrc] = await Promise.all([
@@ -1290,22 +1306,41 @@ async function showUnitLesson(subjectId, unitId) {
     }
 
     const ytQuery = encodeURIComponent(lesson.videoQuery || `${u.name} ${s.name} 解説`);
+    const isHW = lesson.isHardware === true;
 
     document.getElementById('sheet-content').innerHTML = `
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
         <button onclick="closeLessonMode('${subjectId}','${unitId}')"
           style="background:none;border:none;font-size:22px;cursor:pointer;padding:0;line-height:1;color:var(--primary)">←</button>
-        <div style="font-size:17px;font-weight:700;flex:1;line-height:1.3">${u.name}</div>
+        <div style="flex:1">
+          <div style="font-size:17px;font-weight:700;line-height:1.3">${u.name}</div>
+          ${isHW ? `<div style="font-size:11px;font-weight:700;color:#e17055;margin-top:2px">🔧 ハードウェア実践単元</div>` : ''}
+        </div>
       </div>
 
       ${finalImg ? `<img src="${finalImg}" alt="${u.name}"
-        style="width:100%;border-radius:14px;object-fit:cover;max-height:180px;margin-bottom:12px">` : ''}
+        style="width:100%;border-radius:14px;object-fit:cover;max-height:200px;margin-bottom:12px">` : ''}
 
-      <a href="https://www.youtube.com/results?search_query=${ytQuery}" target="_blank"
-        style="display:flex;align-items:center;gap:10px;background:#ff0000;color:white;border-radius:12px;padding:10px 14px;text-decoration:none;margin-bottom:14px;font-weight:700;font-size:13px">
-        <svg viewBox="0 0 24 24" fill="white" width="18" height="18"><path d="M23.5 6.2a3 3 0 00-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 00.5 6.2C0 8.1 0 12 0 12s0 3.9.5 5.8a3 3 0 002.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 002.1-2.1C24 15.9 24 12 24 12s0-3.9-.5-5.8zM9.7 15.5V8.5l6.3 3.5-6.3 3.5z"/></svg>
-        YouTubeで関連動画を見る
-      </a>
+      ${isHW && lesson.partsNeeded?.length ? `
+      <div style="background:#fff8f0;border:1.5px solid #fdcb6e;border-radius:12px;padding:12px;margin-bottom:12px">
+        <div style="font-size:12px;font-weight:700;color:#e17055;margin-bottom:8px">🛒 必要な部品・材料</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          ${lesson.partsNeeded.map(p => `<span style="background:white;border:1px solid #fdcb6e;border-radius:20px;padding:4px 10px;font-size:12px;color:#e17055;font-weight:600">${p}</span>`).join('')}
+        </div>
+      </div>` : ''}
+
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <a href="https://www.youtube.com/results?search_query=${ytQuery}" target="_blank"
+          style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;background:#ff0000;color:white;border-radius:12px;padding:10px;text-decoration:none;font-weight:700;font-size:12px">
+          <svg viewBox="0 0 24 24" fill="white" width="16" height="16"><path d="M23.5 6.2a3 3 0 00-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 00.5 6.2C0 8.1 0 12 0 12s0 3.9.5 5.8a3 3 0 002.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 002.1-2.1C24 15.9 24 12 24 12s0-3.9-.5-5.8zM9.7 15.5V8.5l6.3 3.5-6.3 3.5z"/></svg>
+          YouTube
+        </a>
+        ${isHW ? `
+        <a href="https://falstad.com/circuit/circuitjs.html" target="_blank"
+          style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;background:#0984e3;color:white;border-radius:12px;padding:10px;text-decoration:none;font-weight:700;font-size:12px">
+          ⚡ 回路シミュレーター
+        </a>` : ''}
+      </div>
 
       <div style="background:#f0eeff;border-radius:12px;padding:12px;margin-bottom:16px">
         <div style="font-size:11px;font-weight:700;color:var(--primary);margin-bottom:5px">📌 この単元について</div>
@@ -1317,6 +1352,28 @@ async function showUnitLesson(subjectId, unitId) {
         </div>` : ''}
       </div>
 
+      ${lesson.steps?.length ? `
+      <div style="margin-bottom:16px">
+        <div style="font-size:14px;font-weight:700;margin-bottom:10px">${isHW ? '🔧 実践手順' : '📋 学習ステップ'}</div>
+        ${lesson.steps.map((step, i) => `
+          <div style="display:flex;gap:10px;margin-bottom:10px">
+            <div style="width:28px;height:28px;border-radius:50%;background:var(--primary);color:white;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;margin-top:2px">${i+1}</div>
+            <div style="flex:1;background:var(--card);border-radius:12px;padding:10px 12px;border:1.5px solid var(--border)">
+              <div style="font-size:13px;font-weight:700;margin-bottom:4px">${step.title}</div>
+              <div style="font-size:13px;line-height:1.6;color:var(--text)">${step.description}</div>
+              ${step.tip ? `<div style="margin-top:6px;padding:6px 8px;background:#fff8f0;border-radius:8px;font-size:11px;color:#e17055;line-height:1.5">💡 ${step.tip}</div>` : ''}
+            </div>
+          </div>`).join('')}
+      </div>` : ''}
+
+      ${isHW && lesson.circuitDiagram ? `
+      <div style="margin-bottom:16px">
+        <div style="font-size:14px;font-weight:700;margin-bottom:10px">📐 回路図</div>
+        <div style="background:#1a1a2e;border-radius:12px;padding:14px;overflow-x:auto">
+          <pre style="font-family:monospace;font-size:12px;color:#a29bfe;line-height:1.8;margin:0;white-space:pre-wrap;word-break:break-all">${lesson.circuitDiagram}</pre>
+        </div>
+      </div>` : ''}
+
       ${lesson.concepts?.length ? `
       <div style="margin-bottom:16px">
         <div style="font-size:14px;font-weight:700;margin-bottom:10px">📘 重要概念</div>
@@ -1324,7 +1381,7 @@ async function showUnitLesson(subjectId, unitId) {
           <div style="border:1.5px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px">
             <div style="font-size:13px;font-weight:700;color:var(--primary);margin-bottom:6px">${c.title}</div>
             <div style="font-size:13px;line-height:1.7;margin-bottom:${c.example ? '8px' : '0'}">${c.body}</div>
-            ${c.example ? `<div style="background:#f8f8f8;border-radius:8px;padding:8px;font-size:12px;color:var(--subtext);font-family:monospace;line-height:1.6;white-space:pre-wrap">${c.example}</div>` : ''}
+            ${c.example ? `<div style="background:#1a1a2e;border-radius:8px;padding:8px;font-size:12px;color:#a29bfe;font-family:monospace;line-height:1.6;white-space:pre-wrap">${c.example}</div>` : ''}
           </div>`).join('')}
       </div>` : ''}
 
