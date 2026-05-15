@@ -1217,6 +1217,118 @@ function showUnitDetail(subjectId, unitId) {
   `);
 }
 
+// ── Breadboard SVG Renderer ───────────────
+function drawBreadboardSVG(layout) {
+  if (!layout || !layout.components) return '';
+  const H = 16, BB_X = 158, BB_Y = 48;
+  const COLS = ['a','b','c','d','e','f','g','h','i','j'];
+  const ROWS = Math.min(layout.rows || 20, 25);
+  const SVG_W = 490, SVG_H = BB_Y + ROWS * H + 50;
+
+  function pt(ref) {
+    if (!ref) return null;
+    const m = String(ref).match(/^(\d+)-([a-j])$/i);
+    if (m) {
+      const r = parseInt(m[1]), c = m[2].toLowerCase(), ci = COLS.indexOf(c);
+      if (ci < 0 || r < 1 || r > ROWS) return null;
+      return { x: BB_X + 20 + ci * H + (ci >= 5 ? 10 : 0), y: BB_Y + 14 + (r - 1) * H };
+    }
+    const pmap = { '5V':{x:143,y:BB_Y+14}, '3V3':{x:143,y:BB_Y+30}, 'GND':{x:143,y:BB_Y+46}, 'GND2':{x:143,y:BB_Y+62} };
+    ['D2','D3','D4','D5','D6','D7','D8','D9','D10','D11','D12','D13'].forEach((p,i) => { pmap[p]={x:143,y:BB_Y+78+i*H}; });
+    return pmap[ref] || null;
+  }
+
+  let s = `<svg viewBox="0 0 ${SVG_W} ${SVG_H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;border-radius:12px;background:#f4f4f0;font-family:sans-serif">`;
+
+  // Title
+  if (layout.title) s += `<text x="${SVG_W/2}" y="26" text-anchor="middle" font-size="13" font-weight="bold" fill="#333">${layout.title}</text>`;
+
+  // Arduino Uno board
+  const ardH = ROWS * H + 20;
+  s += `<rect x="8" y="${BB_Y-6}" width="132" height="${ardH}" rx="8" fill="#1565c0" stroke="#0d47a1" stroke-width="2"/>`;
+  s += `<text x="74" y="${BB_Y+8}" text-anchor="middle" font-size="9" fill="white" font-weight="bold">Arduino Uno</text>`;
+  const ardPinDefs = [
+    {l:'5V',c:'#e53935'},{l:'3.3V',c:'#fb8c00'},{l:'GND',c:'#424242'},{l:'GND',c:'#424242'},
+    ...[2,3,4,5,6,7,8,9,10,11,12,13].map(n=>({l:`D${n}`,c:'#7b1fa2'}))
+  ];
+  ardPinDefs.forEach((p,i) => {
+    const py = BB_Y + 14 + i * H;
+    s += `<rect x="118" y="${py-5}" width="22" height="10" rx="2" fill="${p.c}"/>`;
+    s += `<text x="115" y="${py+4}" text-anchor="end" font-size="8" fill="white">${p.l}</text>`;
+  });
+
+  // Breadboard body
+  const bbW = COLS.length * H + 10 + 22, bbH = ROWS * H + 22;
+  s += `<rect x="${BB_X}" y="${BB_Y-6}" width="${bbW}" height="${bbH}" rx="8" fill="#ddd8c4" stroke="#b8ae98" stroke-width="1.5"/>`;
+
+  // Column labels
+  COLS.forEach((c,i) => {
+    s += `<text x="${BB_X+20+i*H+(i>=5?10:0)}" y="${BB_Y+6}" text-anchor="middle" font-size="8" fill="${i<5?'#555':'#777'}">${c}</text>`;
+  });
+
+  // Holes + row numbers
+  for (let r = 1; r <= ROWS; r++) {
+    const ry = BB_Y + 14 + (r-1) * H;
+    s += `<text x="${BB_X+10}" y="${ry+4}" text-anchor="middle" font-size="7" fill="#888">${r}</text>`;
+    COLS.forEach((c,i) => {
+      const hx = BB_X + 20 + i*H + (i>=5?10:0);
+      s += `<circle cx="${hx}" cy="${ry}" r="3.5" fill="#a89e88" stroke="#8a8070" stroke-width="0.5"/>`;
+    });
+  }
+  // Center gap
+  const gx = BB_X + 20 + 5*H + 5;
+  s += `<line x1="${gx}" y1="${BB_Y+2}" x2="${gx}" y2="${BB_Y+bbH-8}" stroke="#c0b898" stroke-width="1" stroke-dasharray="3,2"/>`;
+
+  // Wires
+  (layout.wires||[]).forEach(w => {
+    const p1 = pt(w.from), p2 = pt(w.to);
+    if (!p1 || !p2) return;
+    const cx = (p1.x+p2.x)/2, cy = Math.min(p1.y,p2.y) - 20;
+    s += `<path d="M${p1.x},${p1.y} C${cx},${cy} ${cx},${cy} ${p2.x},${p2.y}" fill="none" stroke="${w.color||'#888'}" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>`;
+    s += `<circle cx="${p1.x}" cy="${p1.y}" r="3" fill="${w.color||'#888'}"/>`;
+    s += `<circle cx="${p2.x}" cy="${p2.y}" r="3" fill="${w.color||'#888'}"/>`;
+    if (w.label) {
+      s += `<text x="${cx}" y="${cy-4}" text-anchor="middle" font-size="7" fill="${w.color||'#888'}">${w.label}</text>`;
+    }
+  });
+
+  // Components
+  (layout.components||[]).forEach(comp => {
+    const p1 = pt(comp.pin1), p2 = pt(comp.pin2);
+    if (!p1 || !p2) return;
+    const cx = (p1.x+p2.x)/2, cy = (p1.y+p2.y)/2;
+    const spanH = Math.abs(p2.y-p1.y), topY = Math.min(p1.y,p2.y);
+    const col = comp.color || (comp.type==='resistor'?'#c8921a':comp.type==='led'?'#e53935':'#1e88e5');
+    // Lead lines
+    s += `<line x1="${p1.x}" y1="${p1.y}" x2="${cx}" y2="${topY+2}" stroke="#666" stroke-width="1.5"/>`;
+    s += `<line x1="${p2.x}" y1="${p2.y}" x2="${cx}" y2="${topY+spanH-2}" stroke="#666" stroke-width="1.5"/>`;
+    // Body
+    s += `<rect x="${cx-9}" y="${topY}" width="18" height="${Math.max(spanH,12)}" rx="4" fill="${col}" stroke="rgba(0,0,0,0.2)" stroke-width="1"/>`;
+    // LED glow
+    if (comp.type==='led') s += `<rect x="${cx-9}" y="${topY}" width="18" height="${Math.max(spanH,12)}" rx="4" fill="${col}" opacity="0.3"/>`;
+    // Label
+    s += `<text x="${cx}" y="${cy+3}" text-anchor="middle" font-size="7" fill="white" font-weight="bold">${comp.label||comp.type}</text>`;
+    // Polarity
+    if (comp.type==='led') {
+      s += `<text x="${p1.x+6}" y="${topY-4}" font-size="8" fill="${col}" font-weight="bold">+</text>`;
+      s += `<text x="${p2.x+6}" y="${topY+spanH+10}" font-size="8" fill="#666">−</text>`;
+    }
+  });
+
+  // Legend
+  s += `<rect x="${BB_X}" y="${BB_Y+bbH+2}" width="${bbW}" height="16" rx="4" fill="none"/>`;
+  const legendItems = [
+    {c:'#e53935',l:'電源(+)'},{c:'#424242',l:'GND(−)'},{c:'#7b1fa2',l:'信号線'},{c:'#1565c0',l:'データ'}
+  ];
+  legendItems.forEach((li,i) => {
+    const lx = BB_X + i * 90;
+    s += `<circle cx="${lx+6}" cy="${BB_Y+bbH+10}" r="4" fill="${li.c}"/>`;
+    s += `<text x="${lx+13}" y="${BB_Y+bbH+14}" font-size="8" fill="#555">${li.l}</text>`;
+  });
+
+  return s + '</svg>';
+}
+
 async function fetchWikipediaImage(query) {
   try {
     const url = `https://ja.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(query)}&prop=pageimages&pithumbsize=600&format=json&origin=*`;
@@ -1277,7 +1389,19 @@ async function showUnitLesson(subjectId, unitId) {
   "summary": "①この単元を終えると何が作れる/動かせるか、②なぜこれを学ぶと後で役立つか、③全く知識がない人向けに身近なものでたとえると（各1〜2文ずつ）",
   "isHardware": false,
   "imageQuery": "日本語Wikipediaで画像検索するための最適なキーワード（1〜3語）",
-  "circuitSVG": "ハードウェア単元のみ: ブレッドボード配線図をSVGコードで描く。Arduinoボード（青い長方形）・ブレッドボード（灰色の格子）・部品（色付き図形）・配線（色付き線）を含む、見やすいFritzing風ダイアグラム。SVGタグから始まり閉じるまでの完全なSVGコードのみ。viewBox='0 0 500 400'。不要なら空文字。",
+  "circuitLayout": {
+    "title": "回路名（例: LED点灯回路 D13ピン使用）",
+    "rows": 15,
+    "components": [
+      {"type": "led", "label": "赤LED", "color": "#ff3333", "pin1": "3-f", "pin2": "5-f"},
+      {"type": "resistor", "label": "220Ω", "color": "#c8921a", "pin1": "5-h", "pin2": "8-h"}
+    ],
+    "wires": [
+      {"from": "D13", "to": "3-j", "color": "#ff3333", "label": "D13"},
+      {"from": "3-a", "to": "3-j", "color": "#ff3333"},
+      {"from": "8-a", "to": "GND", "color": "#333333", "label": "GND"}
+    ]
+  },
   "videoQuery": "YouTubeで検索する日本語クエリ（例: Arduino LED 点灯 回路 初心者 作り方）",
   "objectives": ["この単元を終えると〜できる（動作レベルで具体的に）","目標2","目標3"],
   "partsNeeded": ["部品名 × 個数: なぜ必要か・どこで買えるか（例: 220Ω抵抗 × 1本: LEDに流れる電流を制限するため。秋月電子やAmazonで購入可）"],
@@ -1313,7 +1437,8 @@ async function showUnitLesson(subjectId, unitId) {
 - isHardware: 物理的な部品・配線・はんだ付けを含むならtrue
 - steps: 7〜10ステップ。1ステップ＝1つの操作のみ。description は必ず「何をするか/なぜするか/どうなるか」の3要素を含む
 - concepts: この単元で登場する専門用語を全て網羅する（最低3個）
-- コードは必ず動作する完全なものを書く。「〜を書く」だけでは不可`;
+- コードは必ず動作する完全なものを書く。「〜を書く」だけでは不可
+- circuitLayout（ハードウェアのみ）: ブレッドボードの行1〜25・列a〜j（a-eが左側、f-jが右側）で部品位置を正確に指定。配線色は電源=赤(#e53935)・GND=黒(#333333)・信号=紫(#7b1fa2)。Arduinoピンは"D2"〜"D13"/"5V"/"GND"/"3V3"で指定`;
 
   try {
     const [aiData, imgSrc] = await Promise.all([
@@ -1331,22 +1456,16 @@ async function showUnitLesson(subjectId, unitId) {
       finalImg = await fetchWikipediaImage(lesson.imageQuery);
     }
 
-    // 回路・配線画像: AIのSVGを優先、なければCommonsから取得
+    // 回路・配線図: circuitLayout → JS レンダラーで SVG 生成
     let circuitImg = null;
     let circuitSVG = null;
     if (isHW) {
-      if (lesson.circuitSVG && lesson.circuitSVG.trim().startsWith('<svg')) {
-        circuitSVG = lesson.circuitSVG;
-      } else {
-        // フォールバック: CommonsのFritzing SVGを検索
-        const queries = [
-          `Arduino ${u.name} breadboard Fritzing filetype:svg`,
-          `Arduino breadboard Fritzing LED circuit`,
-        ];
-        for (const q of queries) {
-          circuitImg = await fetchCommonsImage(q);
-          if (circuitImg) break;
-        }
+      if (lesson.circuitLayout) {
+        circuitSVG = drawBreadboardSVG(lesson.circuitLayout);
+      }
+      // SVG生成失敗時はCommonsフォールバック
+      if (!circuitSVG) {
+        circuitImg = await fetchCommonsImage(`Arduino ${u.name} breadboard Fritzing`);
       }
     }
 
@@ -1417,7 +1536,7 @@ async function showUnitLesson(subjectId, unitId) {
         <div style="background:white;border-radius:12px;padding:12px;border:1.5px solid var(--border);overflow:auto;margin-bottom:8px">
           ${circuitSVG}
         </div>
-        <div style="font-size:11px;color:var(--subtext);margin-bottom:10px;text-align:center">↑ AI生成の配線図（部品の色・位置は概略です）</div>` :
+        <div style="font-size:11px;color:var(--subtext);margin-bottom:10px;text-align:center">↑ 配線図（行番号・列記号でブレッドボードの穴位置を示します）</div>` :
         circuitImg ? `
         <img src="${circuitImg}" alt="${u.name} 配線図"
           style="width:100%;border-radius:12px;object-fit:contain;max-height:260px;background:#f8f8f8;margin-bottom:10px">` : ''}
