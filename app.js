@@ -874,7 +874,7 @@ async function callGemini(prompt) {
 
   // Direct Gemini call (API key stored in localStorage)
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
