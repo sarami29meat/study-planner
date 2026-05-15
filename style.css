@@ -237,24 +237,21 @@ html, body {
   z-index: 200; backdrop-filter: blur(2px);
 }
 .sheet {
-  position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
-  width: 100%; max-width: 480px;
-  background: var(--card); border-radius: 24px 24px 0 0;
-  z-index: 300; padding: 0 20px calc(20px + var(--safe-bottom));
-  max-height: 90vh; overflow-y: auto;
-  box-shadow: 0 -4px 40px rgba(0,0,0,0.15);
-  transition: transform 0.3s ease;
+  position: fixed; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: calc(100% - 32px); max-width: 460px;
+  background: var(--card); border-radius: 24px;
+  z-index: 300; padding: 0 20px 20px;
+  max-height: 80vh; overflow-y: auto;
+  box-shadow: 0 8px 60px rgba(0,0,0,0.22);
 }
 .sheet.lesson-mode {
-  max-height: 96vh;
-  height: 96vh;
+  top: 50%; transform: translate(-50%, -50%);
+  max-height: 92vh; height: 92vh;
 }
 .sheet.hidden { display: none; }
-.sheet-handle {
-  width: 40px; height: 4px; background: var(--border);
-  border-radius: 999px; margin: 12px auto 20px;
-}
-.sheet-title { font-size: 20px; font-weight: 700; margin-bottom: 20px; }
+.sheet-handle { display: none; }
+.sheet-title { font-size: 20px; font-weight: 700; margin-bottom: 20px; padding-top: 4px; }
 
 /* ── AI Loading ── */
 .ai-loading {
