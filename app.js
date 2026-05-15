@@ -844,10 +844,14 @@ function showUnitDetail(subjectId, unitId) {
   showSheet(`
     <div class="sheet-title">${u.name}</div>
     ${u.studyMethod ? `
-      <div class="ai-overview" style="margin-bottom:16px">
+      <div class="ai-overview" style="margin-bottom:12px">
         <div class="ai-overview-title">📖 学習方法</div>
         ${u.studyMethod}
       </div>` : ''}
+    <button class="btn btn-full" onclick="showUnitLesson('${subjectId}','${unitId}')"
+      style="margin-bottom:14px;background:linear-gradient(135deg,#6C5CE7,#a29bfe);color:white;font-weight:700;font-size:15px;padding:14px;border-radius:14px;border:none">
+      🎓 AIに解説してもらう
+    </button>
     <div class="form-group">
       <label class="form-label">ステータス</label>
       <select class="form-select" id="ud-status">
@@ -864,6 +868,99 @@ function showUnitDetail(subjectId, unitId) {
       <button class="btn btn-danger" style="flex:1" onclick="deleteUnit('${subjectId}','${unitId}')">削除</button>
     </div>
   `);
+}
+
+async function showUnitLesson(subjectId, unitId) {
+  const s = state.data.subjects.find(s => s.id === subjectId);
+  const u = s?.units.find(u => u.id === unitId);
+  if (!s || !u) return;
+
+  // Show loading state in sheet
+  document.getElementById('sheet-content').innerHTML = `
+    <div class="sheet-title">${u.name}</div>
+    <div style="text-align:center;padding:40px 0;color:var(--subtext)">
+      <div class="spinner" style="margin:0 auto 16px"></div>
+      <div>AIが解説を生成中…</div>
+    </div>`;
+
+  const level = s.level ? `\n学習者のレベル: ${s.level}` : '';
+  const prompt = `あなたは優秀な学習コーチです。
+科目「${s.name}」（目標: ${s.goal}）の単元「${u.name}」について、学習者が実際に学べるコンテンツを生成してください。${level}
+
+以下のJSON形式のみで回答してください（説明文不要）:
+{
+  "summary": "この単元で学ぶ内容の概要（3〜4文）",
+  "keyPoints": [
+    "重要ポイント1",
+    "重要ポイント2",
+    "重要ポイント3",
+    "重要ポイント4",
+    "重要ポイント5"
+  ],
+  "explanation": "この単元の核心となる概念の詳しい解説（300〜400字）",
+  "exercises": [
+    {"question": "練習問題1", "hint": "ヒント1"},
+    {"question": "練習問題2", "hint": "ヒント2"},
+    {"question": "練習問題3", "hint": "ヒント3"}
+  ],
+  "resources": [
+    "おすすめ教材・参考書・サイト名1",
+    "おすすめ教材・参考書・サイト名2"
+  ]
+}`;
+
+  try {
+    const data = await callGemini(prompt);
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+    const lesson = parseJSON(text);
+
+    document.getElementById('sheet-content').innerHTML = `
+      <div class="sheet-title">🎓 ${u.name}</div>
+
+      <div style="background:#f0eeff;border-radius:14px;padding:14px;margin-bottom:14px">
+        <div style="font-size:12px;font-weight:700;color:var(--primary);margin-bottom:6px">この単元について</div>
+        <div style="font-size:14px;line-height:1.7;color:var(--text)">${lesson.summary || ''}</div>
+      </div>
+
+      ${lesson.keyPoints?.length ? `
+      <div style="margin-bottom:14px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:8px">✅ 重要ポイント</div>
+        ${lesson.keyPoints.map(p => `
+          <div style="display:flex;gap:8px;margin-bottom:6px;font-size:13px;line-height:1.5">
+            <span style="color:var(--primary);font-weight:700;flex-shrink:0">•</span>
+            <span>${p}</span>
+          </div>`).join('')}
+      </div>` : ''}
+
+      ${lesson.explanation ? `
+      <div style="margin-bottom:14px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:8px">📘 解説</div>
+        <div style="font-size:13px;line-height:1.8;color:var(--text)">${lesson.explanation}</div>
+      </div>` : ''}
+
+      ${lesson.exercises?.length ? `
+      <div style="margin-bottom:14px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:8px">✏️ 練習問題</div>
+        ${lesson.exercises.map((e, i) => `
+          <div style="background:#f8f8f8;border-radius:10px;padding:12px;margin-bottom:8px">
+            <div style="font-size:13px;font-weight:600;margin-bottom:4px">Q${i+1}. ${e.question}</div>
+            <div style="font-size:12px;color:var(--subtext)">💡 ${e.hint}</div>
+          </div>`).join('')}
+      </div>` : ''}
+
+      ${lesson.resources?.length ? `
+      <div style="margin-bottom:16px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:8px">📚 おすすめ教材</div>
+        ${lesson.resources.map(r => `<div style="font-size:13px;color:var(--subtext);margin-bottom:4px">• ${r}</div>`).join('')}
+      </div>` : ''}
+
+      <button class="btn btn-primary btn-full" onclick="showUnitDetail('${subjectId}','${unitId}')">← 戻る</button>`;
+  } catch (e) {
+    document.getElementById('sheet-content').innerHTML = `
+      <div class="sheet-title">${u.name}</div>
+      <div style="color:var(--danger);padding:20px 0">エラー: ${e.message}</div>
+      <button class="btn btn-secondary btn-full" onclick="showUnitDetail('${subjectId}','${unitId}')">← 戻る</button>`;
+  }
 }
 
 function updateUnit(subjectId, unitId) {
