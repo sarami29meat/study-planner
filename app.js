@@ -14,7 +14,7 @@ function saveData(d) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(d));
 }
 function defaultData() {
-  return { subjects: [], logs: [], settings: { geminiApiKey: '' } };
+  return { subjects: [], logs: [], settings: { geminiApiKey: '', workerUrl: '' } };
 }
 
 // ── State ─────────────────────────────────
@@ -524,18 +524,20 @@ function deleteLog(id) {
 function renderSettings() {
   const el = document.getElementById('view-settings');
   const key = state.data.settings.geminiApiKey;
+  const workerUrl = state.data.settings.workerUrl || '';
+  const aiEnabled = key || workerUrl;
 
   el.innerHTML = `
     <div class="page-header"><div class="page-title">設定<span>.</span></div></div>
     <div style="padding:0 16px 32px">
 
-      ${!key ? `
+      ${!aiEnabled ? `
       <div style="background:linear-gradient(135deg,#fff3cd,#ffe69c);border-radius:16px;padding:16px;margin-bottom:20px;border:1.5px solid #ffd000">
         <div style="font-size:15px;font-weight:700;margin-bottom:4px">⚠️ AI機能が使えません</div>
         <div style="font-size:13px;color:#7a6000;line-height:1.5">下の手順でAIキーを設定すると、学習プランの自動生成などのAI機能が使えるようになります。</div>
       </div>` : `
       <div style="background:#d4f5ed;border-radius:16px;padding:16px;margin-bottom:20px">
-        <div style="font-size:15px;font-weight:700;color:#00b894">✅ AI機能が使えます</div>
+        <div style="font-size:15px;font-weight:700;color:#00b894">✅ AI機能が使えます${workerUrl ? '（Workerモード）' : ''}</div>
       </div>`}
 
       <div class="settings-section">
@@ -588,6 +590,22 @@ function renderSettings() {
       </div>
 
       <div class="settings-section">
+        <div class="settings-section-title">⚡ Cloudflare Worker URL（上級者向け）</div>
+        <div class="card" style="margin:0">
+          <div style="font-size:13px;line-height:1.6;color:var(--subtext);margin-bottom:12px">
+            Cloudflare WorkerのURLを設定すると、<strong>APIキーをこの端末に保存せずに</strong>AI機能を使えます。<br>
+            設定するとAPIキー欄は不要になります。（自分でWorkerをデプロイした場合のみ）
+          </div>
+          <div class="form-group" style="margin-bottom:12px">
+            <input type="url" class="form-input" id="worker-url-input"
+              placeholder="https://studypath-api.xxx.workers.dev"
+              value="${workerUrl}">
+          </div>
+          <button class="btn btn-primary btn-full" onclick="saveWorkerUrl()">Worker URLを保存</button>
+        </div>
+      </div>
+
+      <div class="settings-section">
         <div class="settings-section-title">データ管理</div>
         <div class="card" style="margin:0">
           <div class="text-small" style="margin-bottom:12px">
@@ -615,6 +633,15 @@ function saveApiKey() {
   state.data.settings.geminiApiKey = key;
   saveData(state.data);
   showToast('✓ APIキーを保存しました');
+  renderSettings();
+}
+
+function saveWorkerUrl() {
+  const url = document.getElementById('worker-url-input').value.trim();
+  state.data.settings.workerUrl = url;
+  saveData(state.data);
+  showToast(url ? '✓ Worker URLを保存しました' : 'Worker URLをクリアしました');
+  renderSettings();
 }
 
 function confirmClearAll() {
@@ -714,8 +741,9 @@ function addSubject() {
   navigate('detail', { subjectId: subject.id });
   showToast('✓ 科目を追加しました');
 
-  // APIキーが設定済みなら自動でAIプラン生成
-  if (state.data.settings.geminiApiKey) {
+  // APIキーまたはWorker URLが設定済みなら自動でAIプラン生成
+  const { geminiApiKey, workerUrl } = state.data.settings;
+  if (geminiApiKey || workerUrl) {
     setTimeout(() => runAIPlan(subject.id), 400);
   }
 }
@@ -821,10 +849,52 @@ function deleteSubject(id) {
   showToast('削除しました');
 }
 
+// ── Gemini API helper ─────────────────────
+// Routes through Cloudflare Worker if workerUrl is set, otherwise calls Gemini directly.
+async function callGemini(prompt) {
+  const { geminiApiKey, workerUrl } = state.data.settings;
+
+  if (workerUrl) {
+    // Use Cloudflare Worker (API key hidden server-side)
+    const res = await fetch(workerUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Worker error ${res.status}`);
+    }
+    return res.json();
+  }
+
+  if (!geminiApiKey) {
+    throw new Error('APIキーが設定されていません');
+  }
+
+  // Direct Gemini call (API key stored in localStorage)
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: 'application/json' }
+      })
+    }
+  );
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error?.message || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
 // ── Gemini AI ─────────────────────────────
 async function runAIPlan(subjectId) {
-  const apiKey = state.data.settings.geminiApiKey;
-  if (!apiKey) {
+  const { geminiApiKey, workerUrl } = state.data.settings;
+  if (!geminiApiKey && !workerUrl) {
     showToast('設定タブでGemini APIキーを設定してください');
     navigate('settings');
     return;
@@ -835,7 +905,7 @@ async function runAIPlan(subjectId) {
 
   // 単元がなければまずAIに生成させる
   if (s.units.length === 0) {
-    await generateUnitsAndPlan(s, apiKey);
+    await generateUnitsAndPlan(s);
     return;
   }
 
@@ -870,24 +940,7 @@ async function runAIPlan(subjectId) {
 重要: unitsの名前は入力した単元名と完全一致させてください。orderは推奨学習順序(1から)。`;
 
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { responseMimeType: 'application/json' }
-        })
-      }
-    );
-
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error?.message || `HTTP ${res.status}`);
-    }
-
-    const data = await res.json();
+    const data = await callGemini(prompt);
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     const plan = parseJSON(text);
 
@@ -924,8 +977,8 @@ async function runAIPlan(subjectId) {
 
 // フォームからAIに単元を提案してもらう（科目追加シート内）
 async function suggestUnitsAI() {
-  const apiKey = state.data.settings.geminiApiKey;
-  if (!apiKey) { showToast('設定タブでGemini APIキーを設定してください'); return; }
+  const { geminiApiKey, workerUrl } = state.data.settings;
+  if (!geminiApiKey && !workerUrl) { showToast('設定タブでGemini APIキーを設定してください'); return; }
 
   const name = document.getElementById('ns-name').value.trim();
   const goal = document.getElementById('ns-goal').value.trim();
@@ -933,7 +986,7 @@ async function suggestUnitsAI() {
 
   showAILoading(true);
   try {
-    const units = await fetchSuggestedUnits(name, goal || '習得・マスター', apiKey);
+    const units = await fetchSuggestedUnits(name, goal || '習得・マスター');
     document.getElementById('ns-units').value = units.map(u => u.name).join('\n');
     showAILoading(false);
     showToast(`✨ ${units.length}個の単元を提案しました`);
@@ -944,10 +997,10 @@ async function suggestUnitsAI() {
 }
 
 // 単元ゼロの科目に対してAIが単元生成→プラン生成
-async function generateUnitsAndPlan(s, apiKey) {
+async function generateUnitsAndPlan(s) {
   showAILoading(true);
   try {
-    const units = await fetchSuggestedUnits(s.name, s.goal, apiKey);
+    const units = await fetchSuggestedUnits(s.name, s.goal);
     units.forEach((u, i) => {
       s.units.push({ id: uid(), name: u.name, order: i, estimatedHours: 0, studyMethod: '', status: 'not_started' });
     });
@@ -962,7 +1015,7 @@ async function generateUnitsAndPlan(s, apiKey) {
   }
 }
 
-async function fetchSuggestedUnits(subjectName, goal, apiKey) {
+async function fetchSuggestedUnits(subjectName, goal) {
   const prompt = `あなたは優秀な学習コーチです。
 科目「${subjectName}」で「${goal}」を達成するために必要な学習単元を、
 初心者から目標達成までの順序で網羅的にリストアップしてください。
@@ -975,22 +1028,7 @@ async function fetchSuggestedUnits(subjectName, goal, apiKey) {
   ]
 }`;
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: 'application/json' }
-      })
-    }
-  );
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error?.message || `HTTP ${res.status}`);
-  }
-  const data = await res.json();
+  const data = await callGemini(prompt);
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
   const parsed = parseJSON(text);
   return parsed.units || [];

@@ -1,0 +1,10 @@
+name = "studypath-api"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+# Secret (set via CLI):
+#   wrangler secret put GEMINI_API_KEY
+#   → paste your Gemini API key when prompted
+
+# After deploy, your Worker URL will be:
+#   https://studypath-api.<your-subdomain>.workers.dev
