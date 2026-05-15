@@ -1277,7 +1277,7 @@ async function showUnitLesson(subjectId, unitId) {
   "summary": "①この単元を終えると何が作れる/動かせるか、②なぜこれを学ぶと後で役立つか、③全く知識がない人向けに身近なものでたとえると（各1〜2文ずつ）",
   "isHardware": false,
   "imageQuery": "日本語Wikipediaで画像検索するための最適なキーワード（1〜3語）",
-  "circuitImageQuery": "Wikimedia CommonsでFritzing形式のブレッドボード配線図を検索する英語クエリ。必ず『Fritzing』を含め、部品名を具体的に（例: 'Arduino LED breadboard Fritzing', 'Arduino resistor LED circuit Fritzing'）。ハードウェア単元のみ。不要なら空文字。",
+  "circuitSVG": "ハードウェア単元のみ: ブレッドボード配線図をSVGコードで描く。Arduinoボード（青い長方形）・ブレッドボード（灰色の格子）・部品（色付き図形）・配線（色付き線）を含む、見やすいFritzing風ダイアグラム。SVGタグから始まり閉じるまでの完全なSVGコードのみ。viewBox='0 0 500 400'。不要なら空文字。",
   "videoQuery": "YouTubeで検索する日本語クエリ（例: Arduino LED 点灯 回路 初心者 作り方）",
   "objectives": ["この単元を終えると〜できる（動作レベルで具体的に）","目標2","目標3"],
   "partsNeeded": ["部品名 × 個数: なぜ必要か・どこで買えるか（例: 220Ω抵抗 × 1本: LEDに流れる電流を制限するため。秋月電子やAmazonで購入可）"],
@@ -1331,18 +1331,22 @@ async function showUnitLesson(subjectId, unitId) {
       finalImg = await fetchWikipediaImage(lesson.imageQuery);
     }
 
-    // 回路・配線画像: ハードウェア単元はCommonsのFritzingダイアグラムを取得
+    // 回路・配線画像: AIのSVGを優先、なければCommonsから取得
     let circuitImg = null;
+    let circuitSVG = null;
     if (isHW) {
-      const queries = [
-        lesson.circuitImageQuery,
-        `Arduino ${u.name} breadboard Fritzing`,
-        `${u.name} circuit breadboard Fritzing`,
-        `Arduino breadboard Fritzing circuit`
-      ].filter(Boolean);
-      for (const q of queries) {
-        circuitImg = await fetchCommonsImage(q);
-        if (circuitImg) break;
+      if (lesson.circuitSVG && lesson.circuitSVG.trim().startsWith('<svg')) {
+        circuitSVG = lesson.circuitSVG;
+      } else {
+        // フォールバック: CommonsのFritzing SVGを検索
+        const queries = [
+          `Arduino ${u.name} breadboard Fritzing filetype:svg`,
+          `Arduino breadboard Fritzing LED circuit`,
+        ];
+        for (const q of queries) {
+          circuitImg = await fetchCommonsImage(q);
+          if (circuitImg) break;
+        }
       }
     }
 
@@ -1408,15 +1412,22 @@ async function showUnitLesson(subjectId, unitId) {
 
       ${isHW ? `
       <div style="margin-bottom:16px">
-        <div style="font-size:14px;font-weight:700;margin-bottom:10px">📐 配線図・回路図</div>
-        ${circuitImg ? `
+        <div style="font-size:14px;font-weight:700;margin-bottom:10px">📐 配線図</div>
+        ${circuitSVG ? `
+        <div style="background:white;border-radius:12px;padding:12px;border:1.5px solid var(--border);overflow:auto;margin-bottom:8px">
+          ${circuitSVG}
+        </div>
+        <div style="font-size:11px;color:var(--subtext);margin-bottom:10px;text-align:center">↑ AI生成の配線図（部品の色・位置は概略です）</div>` :
+        circuitImg ? `
         <img src="${circuitImg}" alt="${u.name} 配線図"
-          style="width:100%;border-radius:12px;object-fit:contain;max-height:260px;background:#f8f8f8;margin-bottom:10px">
-        <div style="font-size:11px;color:var(--subtext);margin-bottom:10px;text-align:center">↑ 実際の配線イメージ（Wikimedia Commons）</div>` : ''}
+          style="width:100%;border-radius:12px;object-fit:contain;max-height:260px;background:#f8f8f8;margin-bottom:10px">` : ''}
         ${lesson.circuitDiagram ? `
-        <div style="background:#1a1a2e;border-radius:12px;padding:14px;overflow-x:auto">
-          <pre style="font-family:monospace;font-size:12px;color:#a29bfe;line-height:1.8;margin:0;white-space:pre-wrap;word-break:break-all">${lesson.circuitDiagram}</pre>
-        </div>` : ''}
+        <details>
+          <summary style="cursor:pointer;font-size:12px;color:var(--primary);font-weight:700;margin-bottom:6px;user-select:none">テキスト回路図を見る</summary>
+          <div style="background:#1a1a2e;border-radius:12px;padding:14px;overflow-x:auto;margin-top:6px">
+            <pre style="font-family:monospace;font-size:12px;color:#a29bfe;line-height:1.8;margin:0;white-space:pre-wrap">${lesson.circuitDiagram}</pre>
+          </div>
+        </details>` : ''}
       </div>` : ''}
 
       ${lesson.concepts?.length ? `
