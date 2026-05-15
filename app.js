@@ -14,7 +14,7 @@ function saveData(d) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(d));
 }
 function defaultData() {
-  return { subjects: [], logs: [], settings: { geminiApiKey: '', workerUrl: '' } };
+  return { subjects: [], logs: [], settings: { geminiApiKey: '', groqApiKey: '', workerUrl: '' } };
 }
 
 // ── State ─────────────────────────────────
@@ -523,9 +523,11 @@ function deleteLog(id) {
 // ── Settings ──────────────────────────────
 function renderSettings() {
   const el = document.getElementById('view-settings');
-  const key = state.data.settings.geminiApiKey;
+  const key = state.data.settings.geminiApiKey || '';
+  const groqKey = state.data.settings.groqApiKey || '';
   const workerUrl = state.data.settings.workerUrl || '';
-  const aiEnabled = key || workerUrl;
+  const aiEnabled = key || groqKey || workerUrl;
+  const activeMode = workerUrl ? 'Workerモード' : groqKey ? 'Groqモード' : key ? 'Geminiモード' : '';
 
   el.innerHTML = `
     <div class="page-header"><div class="page-title">設定<span>.</span></div></div>
@@ -534,11 +536,45 @@ function renderSettings() {
       ${!aiEnabled ? `
       <div style="background:linear-gradient(135deg,#fff3cd,#ffe69c);border-radius:16px;padding:16px;margin-bottom:20px;border:1.5px solid #ffd000">
         <div style="font-size:15px;font-weight:700;margin-bottom:4px">⚠️ AI機能が使えません</div>
-        <div style="font-size:13px;color:#7a6000;line-height:1.5">下の手順でAIキーを設定すると、学習プランの自動生成などのAI機能が使えるようになります。</div>
+        <div style="font-size:13px;color:#7a6000;line-height:1.5">下のいずれかのAIキーを設定してください。</div>
       </div>` : `
       <div style="background:#d4f5ed;border-radius:16px;padding:16px;margin-bottom:20px">
-        <div style="font-size:15px;font-weight:700;color:#00b894">✅ AI機能が使えます${workerUrl ? '（Workerモード）' : ''}</div>
+        <div style="font-size:15px;font-weight:700;color:#00b894">✅ AI機能が使えます（${activeMode}）</div>
       </div>`}
+
+      <div class="settings-section">
+        <div class="settings-section-title">⚡ Groq APIキー <span style="background:#00b894;color:white;font-size:10px;padding:2px 7px;border-radius:20px;margin-left:6px;font-weight:700">おすすめ・簡単</span></div>
+        <div class="card" style="margin:0">
+          <div style="font-size:13px;line-height:1.7;color:var(--text);margin-bottom:12px">
+            GeminiのかわりにGroqという無料AIサービスを使う方法です。<strong>登録が簡単</strong>で、1日14,400回まで無料で使えます。
+          </div>
+          <div class="card" style="margin:0 0 12px;padding:0;background:#f8f8f8">
+            ${[
+              ['1','groq.com にアクセス','ブラウザで開いてGoogleアカウントでログイン'],
+              ['2','「API Keys」→「Create API key」','左メニューからAPI Keysを選んでキーを作成'],
+              ['3','コピーして下に貼り付ける','「gsk_...」で始まる文字列をコピーして保存'],
+            ].map(([n, title, desc]) => `
+              <div style="display:flex;gap:12px;padding:12px 14px;border-bottom:1px solid var(--border)">
+                <div style="width:24px;height:24px;border-radius:50%;background:var(--success);color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0">${n}</div>
+                <div>
+                  <div style="font-weight:700;font-size:13px">${title}</div>
+                  <div style="font-size:12px;color:var(--subtext);margin-top:2px">${desc}</div>
+                </div>
+              </div>`).join('')}
+            <div style="padding:12px 14px">
+              <a href="https://console.groq.com/keys" target="_blank"
+                style="display:flex;align-items:center;justify-content:center;gap:8px;background:linear-gradient(135deg,#00b894,#00cec9);color:white;border-radius:12px;padding:12px;font-weight:700;font-size:14px;text-decoration:none">
+                🔗 Groq Console を開く
+              </a>
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom:12px">
+            <input type="password" class="form-input" id="groq-key-input"
+              placeholder="gsk_... をここに貼り付ける" value="${groqKey}">
+          </div>
+          <button class="btn btn-primary btn-full" style="background:linear-gradient(135deg,#00b894,#00cec9)" onclick="saveGroqKey()">Groqキーを保存する</button>
+        </div>
+      </div>
 
       <div class="settings-section">
         <div class="settings-section-title">🤖 AIキーって何？</div>
@@ -633,6 +669,14 @@ function saveApiKey() {
   state.data.settings.geminiApiKey = key;
   saveData(state.data);
   showToast('✓ APIキーを保存しました');
+  renderSettings();
+}
+
+function saveGroqKey() {
+  const key = document.getElementById('groq-key-input').value.trim();
+  state.data.settings.groqApiKey = key;
+  saveData(state.data);
+  showToast(key ? '✓ Groq APIキーを保存しました' : 'Groqキーをクリアしました');
   renderSettings();
 }
 
@@ -742,8 +786,8 @@ function addSubject() {
   showToast('✓ 科目を追加しました');
 
   // APIキーまたはWorker URLが設定済みなら自動でAIプラン生成
-  const { geminiApiKey, workerUrl } = state.data.settings;
-  if (geminiApiKey || workerUrl) {
+  const { geminiApiKey, groqApiKey, workerUrl } = state.data.settings;
+  if (geminiApiKey || groqApiKey || workerUrl) {
     setTimeout(() => runAIPlan(subject.id), 400);
   }
 }
@@ -849,13 +893,13 @@ function deleteSubject(id) {
   showToast('削除しました');
 }
 
-// ── Gemini API helper ─────────────────────
-// Routes through Cloudflare Worker if workerUrl is set, otherwise calls Gemini directly.
+// ── AI API helper ─────────────────────────
+// Priority: Worker URL > Groq API key > Gemini API key
 async function callGemini(prompt) {
-  const { geminiApiKey, workerUrl } = state.data.settings;
+  const { geminiApiKey, groqApiKey, workerUrl } = state.data.settings;
 
   if (workerUrl) {
-    // Use Cloudflare Worker (API key hidden server-side)
+    // Cloudflare Worker (API key hidden server-side)
     const res = await fetch(workerUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -865,37 +909,62 @@ async function callGemini(prompt) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || `Worker error ${res.status}`);
     }
+    return res.json(); // Returns Gemini-format response
+  }
+
+  if (groqApiKey) {
+    // Groq API (OpenAI-compatible, LLaMA 3 model)
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${groqApiKey}`
+      },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0.7
+      })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || `Groq error ${res.status}`);
+    }
+    const data = await res.json();
+    // Normalize to Gemini-format so rest of code works unchanged
+    const text = data.choices?.[0]?.message?.content || '{}';
+    return { candidates: [{ content: { parts: [{ text }] } }] };
+  }
+
+  if (geminiApiKey) {
+    // Direct Gemini call
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType: 'application/json' }
+        })
+      }
+    );
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error?.message || `HTTP ${res.status}`);
+    }
     return res.json();
   }
 
-  if (!geminiApiKey) {
-    throw new Error('APIキーが設定されていません');
-  }
-
-  // Direct Gemini call (API key stored in localStorage)
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: 'application/json' }
-      })
-    }
-  );
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error?.message || `HTTP ${res.status}`);
-  }
-  return res.json();
+  throw new Error('APIキーが設定されていません');
 }
 
 // ── Gemini AI ─────────────────────────────
 async function runAIPlan(subjectId) {
-  const { geminiApiKey, workerUrl } = state.data.settings;
-  if (!geminiApiKey && !workerUrl) {
-    showToast('設定タブでGemini APIキーを設定してください');
+  const { geminiApiKey, groqApiKey, workerUrl } = state.data.settings;
+  if (!geminiApiKey && !groqApiKey && !workerUrl) {
+    showToast('設定タブでAPIキーを設定してください');
     navigate('settings');
     return;
   }
@@ -977,8 +1046,8 @@ async function runAIPlan(subjectId) {
 
 // フォームからAIに単元を提案してもらう（科目追加シート内）
 async function suggestUnitsAI() {
-  const { geminiApiKey, workerUrl } = state.data.settings;
-  if (!geminiApiKey && !workerUrl) { showToast('設定タブでGemini APIキーを設定してください'); return; }
+  const { geminiApiKey, groqApiKey, workerUrl } = state.data.settings;
+  if (!geminiApiKey && !groqApiKey && !workerUrl) { showToast('設定タブでAPIキーを設定してください'); return; }
 
   const name = document.getElementById('ns-name').value.trim();
   const goal = document.getElementById('ns-goal').value.trim();
