@@ -245,6 +245,10 @@ html, body {
   box-shadow: 0 -4px 40px rgba(0,0,0,0.15);
   transition: transform 0.3s ease;
 }
+.sheet.lesson-mode {
+  max-height: 96vh;
+  height: 96vh;
+}
 .sheet.hidden { display: none; }
 .sheet-handle {
   width: 40px; height: 4px; background: var(--border);

@@ -870,97 +870,132 @@ function showUnitDetail(subjectId, unitId) {
   `);
 }
 
+async function fetchWikipediaImage(query) {
+  try {
+    const url = `https://ja.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(query)}&prop=pageimages&pithumbsize=600&format=json&origin=*`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const pages = Object.values(data.query?.pages || {});
+    return pages[0]?.thumbnail?.source || null;
+  } catch { return null; }
+}
+
 async function showUnitLesson(subjectId, unitId) {
   const s = state.data.subjects.find(s => s.id === subjectId);
   const u = s?.units.find(u => u.id === unitId);
   if (!s || !u) return;
 
-  // Show loading state in sheet
+  // Expand sheet to lesson mode
+  document.getElementById('sheet').classList.add('lesson-mode');
   document.getElementById('sheet-content').innerHTML = `
-    <div class="sheet-title">${u.name}</div>
+    <div class="sheet-title">🎓 ${u.name}</div>
     <div style="text-align:center;padding:40px 0;color:var(--subtext)">
       <div class="spinner" style="margin:0 auto 16px"></div>
       <div>AIが解説を生成中…</div>
     </div>`;
+  document.getElementById('sheet').scrollTop = 0;
 
   const level = s.level ? `\n学習者のレベル: ${s.level}` : '';
   const prompt = `あなたは優秀な学習コーチです。
-科目「${s.name}」（目標: ${s.goal}）の単元「${u.name}」について、学習者が実際に学べるコンテンツを生成してください。${level}
+科目「${s.name}」（目標: ${s.goal}）の単元「${u.name}」について学習コンテンツを生成してください。${level}
 
 以下のJSON形式のみで回答してください（説明文不要）:
 {
-  "summary": "この単元で学ぶ内容の概要（3〜4文）",
-  "keyPoints": [
-    "重要ポイント1",
-    "重要ポイント2",
-    "重要ポイント3",
-    "重要ポイント4",
-    "重要ポイント5"
-  ],
-  "explanation": "この単元の核心となる概念の詳しい解説（300〜400字）",
+  "summary": "この単元で学ぶ内容の概要（2文以内・簡潔に）",
+  "imageQuery": "この単元に関連する画像を日本語Wikipediaで検索するための最適な単語（例: マイクロコントローラ）",
+  "videoQuery": "YouTubeで検索する日本語クエリ（例: 組込プログラミング 入門 C言語）",
+  "keyPoints": ["重要ポイント1","重要ポイント2","重要ポイント3","重要ポイント4","重要ポイント5"],
+  "explanation": "核心となる概念の解説（200字程度・簡潔に）",
   "exercises": [
     {"question": "練習問題1", "hint": "ヒント1"},
     {"question": "練習問題2", "hint": "ヒント2"},
     {"question": "練習問題3", "hint": "ヒント3"}
   ],
-  "resources": [
-    "おすすめ教材・参考書・サイト名1",
-    "おすすめ教材・参考書・サイト名2"
-  ]
+  "resources": ["おすすめ教材・参考書1", "おすすめ教材・参考書2"]
 }`;
 
   try {
-    const data = await callGemini(prompt);
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+    const [aiData, imgSrc] = await Promise.all([
+      callGemini(prompt),
+      fetchWikipediaImage(u.name)
+    ]);
+
+    const text = aiData.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
     const lesson = parseJSON(text);
 
-    document.getElementById('sheet-content').innerHTML = `
-      <div class="sheet-title">🎓 ${u.name}</div>
+    // If AI suggested a better image query and we got no image, try that
+    let finalImg = imgSrc;
+    if (!finalImg && lesson.imageQuery) {
+      finalImg = await fetchWikipediaImage(lesson.imageQuery);
+    }
 
-      <div style="background:#f0eeff;border-radius:14px;padding:14px;margin-bottom:14px">
-        <div style="font-size:12px;font-weight:700;color:var(--primary);margin-bottom:6px">この単元について</div>
-        <div style="font-size:14px;line-height:1.7;color:var(--text)">${lesson.summary || ''}</div>
+    const ytQuery = encodeURIComponent(lesson.videoQuery || `${u.name} ${s.name} 解説`);
+
+    document.getElementById('sheet-content').innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+        <button onclick="closeLessonMode('${subjectId}','${unitId}')"
+          style="background:none;border:none;font-size:22px;cursor:pointer;padding:0;line-height:1">←</button>
+        <div style="font-size:18px;font-weight:700;flex:1">${u.name}</div>
+      </div>
+
+      ${finalImg ? `
+      <img src="${finalImg}" alt="${u.name}"
+        style="width:100%;border-radius:14px;object-fit:cover;max-height:200px;margin-bottom:12px">` : ''}
+
+      <a href="https://www.youtube.com/results?search_query=${ytQuery}" target="_blank"
+        style="display:flex;align-items:center;gap:10px;background:#ff0000;color:white;border-radius:12px;padding:11px 14px;text-decoration:none;margin-bottom:14px;font-weight:700;font-size:14px">
+        <svg viewBox="0 0 24 24" fill="white" width="20" height="20"><path d="M23.5 6.2a3 3 0 00-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 00.5 6.2C0 8.1 0 12 0 12s0 3.9.5 5.8a3 3 0 002.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 002.1-2.1C24 15.9 24 12 24 12s0-3.9-.5-5.8zM9.7 15.5V8.5l6.3 3.5-6.3 3.5z"/></svg>
+        YouTubeで動画を見る
+      </a>
+
+      <div style="background:#f0eeff;border-radius:12px;padding:12px;margin-bottom:14px">
+        <div style="font-size:11px;font-weight:700;color:var(--primary);margin-bottom:4px">この単元について</div>
+        <div style="font-size:13px;line-height:1.6">${lesson.summary || ''}</div>
       </div>
 
       ${lesson.keyPoints?.length ? `
       <div style="margin-bottom:14px">
         <div style="font-size:13px;font-weight:700;margin-bottom:8px">✅ 重要ポイント</div>
         ${lesson.keyPoints.map(p => `
-          <div style="display:flex;gap:8px;margin-bottom:6px;font-size:13px;line-height:1.5">
-            <span style="color:var(--primary);font-weight:700;flex-shrink:0">•</span>
-            <span>${p}</span>
+          <div style="display:flex;gap:8px;margin-bottom:5px;font-size:13px;line-height:1.5">
+            <span style="color:var(--primary);font-weight:700;flex-shrink:0">•</span><span>${p}</span>
           </div>`).join('')}
       </div>` : ''}
 
       ${lesson.explanation ? `
       <div style="margin-bottom:14px">
-        <div style="font-size:13px;font-weight:700;margin-bottom:8px">📘 解説</div>
-        <div style="font-size:13px;line-height:1.8;color:var(--text)">${lesson.explanation}</div>
+        <div style="font-size:13px;font-weight:700;margin-bottom:6px">📘 解説</div>
+        <div style="font-size:13px;line-height:1.7;color:var(--text)">${lesson.explanation}</div>
       </div>` : ''}
 
       ${lesson.exercises?.length ? `
       <div style="margin-bottom:14px">
         <div style="font-size:13px;font-weight:700;margin-bottom:8px">✏️ 練習問題</div>
         ${lesson.exercises.map((e, i) => `
-          <div style="background:#f8f8f8;border-radius:10px;padding:12px;margin-bottom:8px">
-            <div style="font-size:13px;font-weight:600;margin-bottom:4px">Q${i+1}. ${e.question}</div>
+          <div style="background:#f8f8f8;border-radius:10px;padding:11px;margin-bottom:8px">
+            <div style="font-size:13px;font-weight:600;margin-bottom:3px">Q${i+1}. ${e.question}</div>
             <div style="font-size:12px;color:var(--subtext)">💡 ${e.hint}</div>
           </div>`).join('')}
       </div>` : ''}
 
       ${lesson.resources?.length ? `
-      <div style="margin-bottom:16px">
-        <div style="font-size:13px;font-weight:700;margin-bottom:8px">📚 おすすめ教材</div>
+      <div style="margin-bottom:20px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:6px">📚 おすすめ教材</div>
         ${lesson.resources.map(r => `<div style="font-size:13px;color:var(--subtext);margin-bottom:4px">• ${r}</div>`).join('')}
-      </div>` : ''}
+      </div>` : ''}`;
 
-      <button class="btn btn-primary btn-full" onclick="showUnitDetail('${subjectId}','${unitId}')">← 戻る</button>`;
+    document.getElementById('sheet').scrollTop = 0;
   } catch (e) {
     document.getElementById('sheet-content').innerHTML = `
       <div class="sheet-title">${u.name}</div>
       <div style="color:var(--danger);padding:20px 0">エラー: ${e.message}</div>
-      <button class="btn btn-secondary btn-full" onclick="showUnitDetail('${subjectId}','${unitId}')">← 戻る</button>`;
+      <button class="btn btn-secondary btn-full" onclick="closeLessonMode('${subjectId}','${unitId}')">← 戻る</button>`;
   }
+}
+
+function closeLessonMode(subjectId, unitId) {
+  document.getElementById('sheet').classList.remove('lesson-mode');
+  showUnitDetail(subjectId, unitId);
 }
 
 function updateUnit(subjectId, unitId) {
@@ -1221,7 +1256,9 @@ function showSheet(html) {
 }
 
 function hideSheet() {
-  document.getElementById('sheet').classList.add('hidden');
+  const sheet = document.getElementById('sheet');
+  sheet.classList.add('hidden');
+  sheet.classList.remove('lesson-mode');
   document.getElementById('overlay').classList.add('hidden');
 }
 
