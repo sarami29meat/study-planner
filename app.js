@@ -14,7 +14,7 @@ function saveData(d) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(d));
 }
 function defaultData() {
-  return { subjects: [], logs: [], settings: { geminiApiKey: '', groqApiKey: '', workerUrl: '' } };
+  return { subjects: [], logs: [], settings: { geminiApiKey: '', groqApiKey: '', workerUrl: '', busyDays: [] } };
 }
 
 // ── State ─────────────────────────────────
@@ -23,6 +23,8 @@ const state = {
   detailSubjectId: null,
   logSubjectId: null,
   logUnitId: null,
+  calendarYear: new Date().getFullYear(),
+  calendarMonth: new Date().getMonth(),
   data: loadData(),
 };
 
@@ -91,6 +93,7 @@ function renderView(view) {
     case 'subjects': renderSubjects(); break;
     case 'detail':   renderDetail(); break;
     case 'log':      renderLog(); break;
+    case 'calendar': renderCalendar(); break;
     case 'history':  renderHistory(); break;
     case 'settings': renderSettings(); break;
   }
@@ -463,6 +466,227 @@ function saveLog() {
   saveData(state.data);
   showToast('✓ 記録しました！');
   navigate('home');
+}
+
+// ── Schedule generation ───────────────────
+function generateSchedule(subject) {
+  if (!subject.units.length) return [];
+  const busyDays = state.data.settings.busyDays || [];
+  const sortedUnits = [...subject.units].sort((a, b) => a.order - b.order);
+  const hoursPerDay = subject.hoursPerDay || 2;
+  const schedule = [];
+
+  let cur = new Date(today() + 'T00:00:00');
+  const deadline = new Date(subject.deadline + 'T00:00:00');
+
+  for (const unit of sortedUnits) {
+    let remaining = (unit.estimatedHours || 2) * 60; // in minutes
+    while (remaining > 0 && cur <= deadline) {
+      const ds = cur.toISOString().split('T')[0];
+      if (!busyDays.includes(ds)) {
+        const mins = Math.min(hoursPerDay * 60, remaining);
+        schedule.push({ date: ds, unitId: unit.id, unitName: unit.name, minutes: mins });
+        remaining -= mins;
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
+  }
+  return schedule;
+}
+
+function rebuildAllSchedules() {
+  state.data.subjects.forEach(s => { s.schedule = generateSchedule(s); });
+  saveData(state.data);
+}
+
+// ── Calendar ──────────────────────────────
+function renderCalendar() {
+  const el = document.getElementById('view-calendar');
+  const busyDays = state.data.settings.busyDays || [];
+  const year = state.calendarYear;
+  const month = state.calendarMonth;
+
+  // Collect all schedule entries for this month
+  const scheduleMap = {}; // date → [{subjectName, unitName, minutes}]
+  state.data.subjects.forEach(s => {
+    (s.schedule || []).forEach(e => {
+      if (!scheduleMap[e.date]) scheduleMap[e.date] = [];
+      scheduleMap[e.date].push({ subjectName: s.name, unitName: e.unitName, minutes: e.minutes });
+    });
+  });
+
+  // Logged days
+  const loggedMap = {};
+  state.data.logs.forEach(l => {
+    if (!loggedMap[l.date]) loggedMap[l.date] = 0;
+    loggedMap[l.date] += l.minutes;
+  });
+
+  const monthName = new Date(year, month, 1).toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' });
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const todayStr = today();
+
+  let html = `
+    <div class="page-header">
+      <div class="page-title">予定<span>.</span></div>
+    </div>
+    <div style="padding:0 16px 8px">
+      <div style="background:#f0eeff;border-radius:12px;padding:10px 14px;font-size:13px;color:var(--primary);line-height:1.5;margin-bottom:12px">
+        📅 日付をタップして<strong>予定あり</strong>にマーク。学習スケジュールが自動的に調整されます。
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <button onclick="calNavMonth(-1)" style="background:none;border:1.5px solid var(--border);border-radius:10px;padding:6px 14px;font-size:18px;cursor:pointer">‹</button>
+        <div style="font-size:16px;font-weight:700">${monthName}</div>
+        <button onclick="calNavMonth(1)" style="background:none;border:1.5px solid var(--border);border-radius:10px;padding:6px 14px;font-size:18px;cursor:pointer">›</button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:4px">
+        ${['日','月','火','水','木','金','土'].map((d,i) => `
+          <div style="text-align:center;font-size:11px;font-weight:700;color:${i===0?'#e17055':i===6?'#0984e3':'var(--subtext)'};padding:4px 0">${d}</div>`).join('')}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">
+        ${Array(firstDay).fill('<div></div>').join('')}
+        ${Array.from({length: daysInMonth}, (_, i) => {
+          const d = i + 1;
+          const ds = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+          const isBusy = busyDays.includes(ds);
+          const isToday = ds === todayStr;
+          const tasks = scheduleMap[ds] || [];
+          const logged = loggedMap[ds] || 0;
+          const dow = (firstDay + i) % 7;
+
+          let bg = 'white', border = '1.5px solid var(--border)', color = dow===0?'#e17055':dow===6?'#0984e3':'var(--text)';
+          if (isToday) { border = '2px solid var(--primary)'; }
+          if (isBusy) { bg = '#ffeaea'; color = '#e17055'; border = '1.5px solid #fab1a0'; }
+          else if (tasks.length) { bg = '#f0eeff'; border = '1.5px solid var(--primary-light)'; }
+          if (logged > 0) { bg = '#d4f5ed'; border = '1.5px solid #00b894'; }
+
+          return `
+            <div onclick="calTapDay('${ds}')" style="background:${bg};border:${border};border-radius:10px;padding:6px 4px;min-height:54px;cursor:pointer;position:relative">
+              <div style="font-size:13px;font-weight:${isToday?'700':'500'};color:${color};text-align:center">${d}</div>
+              ${isBusy ? `<div style="font-size:9px;text-align:center;color:#e17055;margin-top:2px">予定あり</div>` : ''}
+              ${!isBusy && tasks.length ? `<div style="font-size:9px;text-align:center;color:var(--primary);margin-top:2px;line-height:1.3">${tasks[0].unitName.slice(0,6)}${tasks[0].unitName.length>6?'…':''}</div>` : ''}
+              ${logged > 0 ? `<div style="font-size:9px;text-align:center;color:#00b894;margin-top:2px">${minutesToHM(logged)}</div>` : ''}
+            </div>`;
+        }).join('')}
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:5px;font-size:11px"><div style="width:12px;height:12px;background:#f0eeff;border:1.5px solid var(--primary-light);border-radius:3px"></div>学習予定</div>
+        <div style="display:flex;align-items:center;gap:5px;font-size:11px"><div style="width:12px;height:12px;background:#d4f5ed;border:1.5px solid #00b894;border-radius:3px"></div>記録済み</div>
+        <div style="display:flex;align-items:center;gap:5px;font-size:11px"><div style="width:12px;height:12px;background:#ffeaea;border:1.5px solid #fab1a0;border-radius:3px"></div>予定あり</div>
+      </div>
+    </div>`;
+
+  // Week ahead detail
+  const upcoming = [];
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(todayStr + 'T00:00:00');
+    d.setDate(d.getDate() + i);
+    const ds = d.toISOString().split('T')[0];
+    if (scheduleMap[ds]) upcoming.push({ date: ds, tasks: scheduleMap[ds] });
+  }
+
+  if (upcoming.length) {
+    html += `<div class="card" style="margin-top:4px"><div class="card-title">今後2週間の学習予定</div>`;
+    upcoming.forEach(({ date, tasks }) => {
+      const isBusy = busyDays.includes(date);
+      if (isBusy) return;
+      html += `
+        <div style="display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--border)">
+          <div style="width:44px;text-align:center;flex-shrink:0">
+            <div style="font-size:18px;font-weight:700;color:var(--primary)">${new Date(date+'T00:00:00').getDate()}</div>
+            <div style="font-size:10px;color:var(--subtext)">${new Date(date+'T00:00:00').toLocaleDateString('ja-JP',{weekday:'short'})}</div>
+          </div>
+          <div style="flex:1">
+            ${tasks.map(t => `
+              <div style="font-size:13px;font-weight:600">${t.subjectName}</div>
+              <div style="font-size:12px;color:var(--subtext)">${t.unitName} · ${minutesToHM(t.minutes)}</div>
+            `).join('')}
+          </div>
+        </div>`;
+    });
+    html += `</div>`;
+  }
+
+  if (!state.data.subjects.length || !state.data.subjects.some(s => s.schedule?.length)) {
+    html += `
+      <div class="empty-state">
+        <div class="empty-icon">📅</div>
+        <div class="empty-title">スケジュールがありません</div>
+        <div class="empty-sub">科目を追加してAIプランを作成すると<br>ここに学習スケジュールが表示されます</div>
+      </div>`;
+  }
+
+  el.innerHTML = html;
+}
+
+function calNavMonth(delta) {
+  state.calendarMonth += delta;
+  if (state.calendarMonth < 0) { state.calendarMonth = 11; state.calendarYear--; }
+  if (state.calendarMonth > 11) { state.calendarMonth = 0; state.calendarYear++; }
+  renderCalendar();
+}
+
+function calTapDay(date) {
+  const busyDays = state.data.settings.busyDays || [];
+  const scheduleMap = {};
+  state.data.subjects.forEach(s => {
+    (s.schedule || []).forEach(e => {
+      if (!scheduleMap[e.date]) scheduleMap[e.date] = [];
+      scheduleMap[e.date].push({ subjectId: s.id, unitId: e.unitId, unitName: e.unitName, subjectName: s.name });
+    });
+  });
+
+  const isBusy = busyDays.includes(date);
+  const tasks = scheduleMap[date] || [];
+  const dateLabel = new Date(date + 'T00:00:00').toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' });
+
+  showSheet(`
+    <div class="sheet-title">📅 ${dateLabel}</div>
+    ${isBusy ? `
+      <div style="background:#ffeaea;border-radius:12px;padding:12px;margin-bottom:14px;color:#e17055;font-weight:600;text-align:center">
+        この日は予定あり
+      </div>` : tasks.length ? `
+      <div style="margin-bottom:14px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:8px">📚 この日の学習予定</div>
+        ${tasks.map(t => `
+          <div style="background:#f0eeff;border-radius:10px;padding:12px;margin-bottom:8px">
+            <div style="font-size:14px;font-weight:700;color:var(--primary)">${t.subjectName}</div>
+            <div style="font-size:13px;margin-top:2px">${t.unitName}</div>
+            <button onclick="hideSheet();showUnitLesson('${t.subjectId}','${t.unitId}')"
+              style="margin-top:10px;background:var(--primary);color:white;border:none;border-radius:10px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;width:100%">
+              🎓 今日学習する
+            </button>
+          </div>`).join('')}
+      </div>` : `
+      <div style="text-align:center;padding:20px 0;color:var(--subtext);font-size:14px">
+        この日の学習予定はありません
+      </div>`}
+    <div style="display:flex;gap:8px">
+      <button onclick="toggleBusyDay('${date}')" class="btn ${isBusy ? 'btn-secondary' : 'btn-danger'}" style="flex:1">
+        ${isBusy ? '✓ 予定ありを解除' : '× この日は予定あり'}
+      </button>
+      <button onclick="hideSheet()" class="btn btn-secondary" style="flex:1">閉じる</button>
+    </div>
+  `);
+}
+
+function toggleBusyDay(date) {
+  if (!state.data.settings.busyDays) state.data.settings.busyDays = [];
+  const idx = state.data.settings.busyDays.indexOf(date);
+  if (idx >= 0) {
+    state.data.settings.busyDays.splice(idx, 1);
+    showToast('予定を解除しました');
+  } else {
+    state.data.settings.busyDays.push(date);
+    showToast('予定ありに設定しました');
+  }
+  // Rebuild all schedules to skip busy days
+  rebuildAllSchedules();
+  hideSheet();
+  renderCalendar();
 }
 
 // ── History ───────────────────────────────
@@ -1226,6 +1450,8 @@ async function runAIPlan(subjectId) {
       });
     }
 
+    // Generate calendar schedule
+    s.schedule = generateSchedule(s);
     saveData(state.data);
     showAILoading(false);
     renderDetail();
