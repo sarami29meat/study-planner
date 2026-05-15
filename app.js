@@ -888,14 +888,13 @@ async function showUnitLesson(subjectId, unitId) {
   const u = s?.units.find(u => u.id === unitId);
   if (!s || !u) return;
 
-  // Expand sheet to lesson mode
-  document.getElementById('sheet').classList.add('lesson-mode');
-  document.getElementById('sheet-content').innerHTML = `
-    <div class="sheet-title">🎓 ${u.name}</div>
+  // Show sheet in lesson mode
+  showSheet(`
     <div style="text-align:center;padding:40px 0;color:var(--subtext)">
       <div class="spinner" style="margin:0 auto 16px"></div>
       <div>AIが解説を生成中…</div>
-    </div>`;
+    </div>`);
+  document.getElementById('sheet').classList.add('lesson-mode');
   document.getElementById('sheet').scrollTop = 0;
 
   const level = s.level ? `\n学習者のレベル: ${s.level}（このレベルに合わせて内容を調整すること）` : '';
