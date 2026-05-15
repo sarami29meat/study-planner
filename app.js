@@ -105,100 +105,154 @@ function renderHome() {
   const subjects = state.data.subjects;
   const now = new Date();
   const dateStr = now.toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' });
+  const { geminiApiKey, groqApiKey, workerUrl } = state.data.settings;
+  const aiEnabled = geminiApiKey || groqApiKey || workerUrl;
 
-  // Build today tasks from all subjects
-  const todayTasks = subjects.flatMap(s => {
-    const u = currentUnit(s);
-    if (!u) return [];
-    const rec = s.aiPlan?.dailyHoursRecommended || 1;
-    return [{ subjectId: s.id, unitId: u.id, subject: s.name, unit: u.name, method: u.studyMethod, hours: rec }];
+  // Today's schedule entries
+  const todaySchedule = [];
+  subjects.forEach(s => {
+    (s.schedule || []).filter(e => e.date === today()).forEach(e => {
+      todaySchedule.push({ subjectId: s.id, unitId: e.unitId, subjectName: s.name, unitName: e.unitName, minutes: e.minutes });
+    });
   });
 
-  let html = `<div style="padding-bottom:16px">`;
+  // Fallback: current unit per subject if no schedule
+  const todayTasks = todaySchedule.length > 0 ? todaySchedule : subjects.flatMap(s => {
+    const u = currentUnit(s);
+    if (!u) return [];
+    return [{ subjectId: s.id, unitId: u.id, subjectName: s.name, unitName: u.name, minutes: (s.hoursPerDay || 2) * 60 }];
+  });
 
-  if (!state.data.settings.geminiApiKey) {
+  // This week strip
+  const weekDays = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(today() + 'T00:00:00');
+    d.setDate(d.getDate() + i);
+    const ds = d.toISOString().split('T')[0];
+    const hasTask = subjects.some(s => (s.schedule || []).some(e => e.date === ds));
+    const logged = state.data.logs.filter(l => l.date === ds).reduce((s, l) => s + l.minutes, 0);
+    const isBusy = (state.data.settings.busyDays || []).includes(ds);
+    return { ds, day: d.getDate(), dow: ['日','月','火','水','木','金','土'][d.getDay()], isToday: ds === today(), hasTask, logged, isBusy };
+  });
+
+  let html = `<div style="padding-bottom:24px">`;
+
+  // ── API key banner ──
+  if (!aiEnabled) {
     html += `
-      <div onclick="navigate('settings')" class="api-key-banner">
-        <div class="api-key-banner-icon">🤖</div>
-        <div class="api-key-banner-body">
-          <div class="api-key-banner-title">AI機能を有効にしよう</div>
-          <div class="api-key-banner-sub">タップして無料のAPIキーを設定（3ステップ・無料）</div>
+      <div onclick="navigate('settings')" style="margin:12px 16px 0;background:linear-gradient(135deg,#fff3cd,#ffe69c);border-radius:14px;padding:13px 16px;display:flex;align-items:center;gap:12px;border:1.5px solid #ffd000;cursor:pointer">
+        <div style="font-size:22px">🤖</div>
+        <div style="flex:1">
+          <div style="font-weight:700;font-size:14px">AI機能を有効にしよう</div>
+          <div style="font-size:12px;color:#7a6000;margin-top:2px">タップして設定 → Groq APIキーを貼り付けるだけ</div>
         </div>
-        <div class="api-key-banner-arrow">›</div>
+        <div style="font-size:20px;color:#7a6000">›</div>
       </div>`;
   }
 
+  // ── Main study card ──
+  if (subjects.length === 0) {
+    html += `
+      <div style="margin:16px 16px 0;background:linear-gradient(135deg,var(--primary),var(--primary-dark));border-radius:22px;padding:24px;color:white;text-align:center">
+        <div style="font-size:48px;margin-bottom:12px">📚</div>
+        <div style="font-size:20px;font-weight:700;margin-bottom:8px">学習を始めよう</div>
+        <div style="font-size:14px;opacity:0.85;margin-bottom:20px">科目を追加するだけで、AIが学習プランを自動作成します</div>
+        <button onclick="navigate('subjects');setTimeout(showAddSubject,100)"
+          style="background:white;color:var(--primary);border:none;border-radius:14px;padding:14px 28px;font-size:16px;font-weight:700;cursor:pointer;width:100%">
+          ＋ 最初の科目を追加する
+        </button>
+      </div>`;
+  } else if (todayTasks.length > 0) {
+    const first = todayTasks[0];
+    html += `
+      <div style="margin:16px 16px 0;background:linear-gradient(135deg,var(--primary),var(--primary-dark));border-radius:22px;padding:20px;color:white;box-shadow:0 8px 24px rgba(108,92,231,0.35)">
+        <div style="font-size:12px;opacity:0.75;margin-bottom:4px">${dateStr}</div>
+        <div style="font-size:13px;opacity:0.85;margin-bottom:2px">今日学ぶこと</div>
+        <div style="font-size:20px;font-weight:700;margin-bottom:2px;line-height:1.3">${first.unitName}</div>
+        <div style="font-size:13px;opacity:0.75;margin-bottom:16px">${first.subjectName} · ${minutesToHM(first.minutes)}</div>
+        <button onclick="showUnitLesson('${first.subjectId}','${first.unitId}')"
+          style="background:white;color:var(--primary);border:none;border-radius:14px;padding:14px;font-size:16px;font-weight:700;cursor:pointer;width:100%;display:flex;align-items:center;justify-content:center;gap:8px">
+          <span>🎓</span> 学習を開始する
+        </button>
+        ${todayTasks.length > 1 ? `
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.2)">
+          ${todayTasks.slice(1).map(t => `
+            <div onclick="showUnitLesson('${t.subjectId}','${t.unitId}')" style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer">
+              <div style="width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,0.5)"></div>
+              <div style="font-size:13px;opacity:0.85;flex:1">${t.subjectName} — ${t.unitName}</div>
+              <div style="font-size:12px;opacity:0.65">${minutesToHM(t.minutes)}</div>
+            </div>`).join('')}
+        </div>` : ''}
+      </div>`;
+  }
+
+  // ── Week strip ──
   html += `
-      <div class="today-card">
-        <div class="today-date">${dateStr}</div>
-        <div class="today-title">今日やること</div>
-        <div class="today-sub">${subjects.length > 0 ? 'AIが提案する本日の学習' : 'まず科目を追加しよう！'}</div>
-        ${todayTasks.length > 0 ? `
-          <div class="today-task-list">
-            ${todayTasks.map(t => `
-              <div class="today-task-item" onclick="showUnitLesson('${t.subjectId}','${t.unitId}')" style="cursor:pointer">
-                <div class="today-task-dot"></div>
-                <div class="today-task-text" style="flex:1">${t.subject} — ${t.unit}</div>
-                <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
-                  <div class="today-task-time">${t.hours}h</div>
-                  <div style="background:rgba(255,255,255,0.25);border-radius:20px;padding:3px 10px;font-size:12px;font-weight:700;color:white">学習 ›</div>
+    <div style="margin:12px 16px 0">
+      <div style="font-size:12px;font-weight:700;color:var(--subtext);margin-bottom:8px;letter-spacing:0.5px;text-transform:uppercase">今週のスケジュール</div>
+      <div style="display:flex;gap:6px">
+        ${weekDays.map(w => `
+          <div onclick="navigate('calendar')" style="flex:1;text-align:center;cursor:pointer">
+            <div style="font-size:10px;color:${w.dow==='日'?'#e17055':w.dow==='土'?'#0984e3':'var(--subtext)'};margin-bottom:4px">${w.dow}</div>
+            <div style="width:100%;aspect-ratio:1;border-radius:10px;display:flex;align-items:center;justify-content:center;
+              background:${w.logged>0?'#d4f5ed':w.isBusy?'#ffeaea':w.hasTask?'#f0eeff':'var(--card)'};
+              border:${w.isToday?'2px solid var(--primary)':'1.5px solid var(--border)'};
+              font-size:13px;font-weight:${w.isToday?'700':'500'};
+              color:${w.logged>0?'#00b894':w.isBusy?'#e17055':w.isToday?'var(--primary)':'var(--text)'}">
+              ${w.day}
+            </div>
+            <div style="font-size:9px;margin-top:3px;color:${w.logged>0?'#00b894':w.hasTask?'var(--primary)':'transparent'}">
+              ${w.logged>0?'✓':w.hasTask?'●':'·'}
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+
+  // ── Progress ──
+  if (subjects.length > 0) {
+    html += `
+      <div style="margin:12px 16px 0;background:var(--card);border-radius:16px;padding:16px;box-shadow:0 2px 12px rgba(108,92,231,0.06)">
+        <div style="font-size:12px;font-weight:700;color:var(--subtext);letter-spacing:0.5px;text-transform:uppercase;margin-bottom:12px">進捗</div>
+        ${subjects.map(s => {
+          const pct = subjectProgress(s);
+          const cu = currentUnit(s);
+          return `
+            <div onclick="navigate('detail',{subjectId:'${s.id}'})" style="margin-bottom:14px;cursor:pointer">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+                <div>
+                  <div style="font-weight:700;font-size:15px">${s.name}</div>
+                  ${cu ? `<div style="font-size:12px;color:var(--subtext);margin-top:1px">次: ${cu.name}</div>` : ''}
+                </div>
+                <div style="text-align:right">
+                  <div style="font-size:22px;font-weight:700;color:var(--primary)">${pct}%</div>
+                  <div style="font-size:11px;color:var(--subtext)">残り${daysLeft(s.deadline)}日</div>
                 </div>
               </div>
-            `).join('')}
-          </div>` : subjects.length === 0 ? `
-          <div class="today-empty-cta">
-            <div style="font-size:13px;opacity:0.9;margin-bottom:10px">科目を追加するだけで、AIが学習プランを自動作成します</div>
-            <button class="today-add-btn" onclick="navigate('subjects');setTimeout(showAddSubject,100)">
-              ＋ 最初の科目を追加する
-            </button>
-          </div>` : `<div class="today-empty">学習を記録すると今日のタスクが表示されます</div>`}
-      </div>
-  `;
-
-  if (subjects.length > 0) {
-    html += `<div class="card"><div class="card-title">科目の進捗</div>`;
-    subjects.forEach(s => {
-      const pct = subjectProgress(s);
-      const todayMin = todayLoggedMinutes(s.id);
-      html += `
-        <div style="margin-bottom:14px">
-          <div class="flex-between mb8">
-            <div>
-              <div style="font-weight:700;font-size:15px">${s.name}</div>
-              <div class="text-small">${s.goal}</div>
-            </div>
-            <div style="text-align:right">
-              <div style="font-size:20px;font-weight:700;color:var(--primary)">${pct}%</div>
-              <div class="text-small">今日 ${minutesToHM(todayMin)}</div>
-            </div>
-          </div>
-          <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
-          <div class="text-small mt4">残り ${daysLeft(s.deadline)} 日</div>
-        </div>`;
-    });
-    html += `</div>`;
+              <div class="progress-bar" style="height:8px"><div class="progress-fill" style="width:${pct}%"></div></div>
+            </div>`;
+        }).join('')}
+      </div>`;
 
     // Recent logs
-    const recent = [...state.data.logs]
-      .sort((a, b) => b.createdAt - a.createdAt)
-      .slice(0, 5);
+    const recent = [...state.data.logs].sort((a, b) => b.createdAt - a.createdAt).slice(0, 3);
     if (recent.length > 0) {
-      html += `<div class="card"><div class="card-title">最近の記録</div>`;
-      recent.forEach(l => {
-        const s = state.data.subjects.find(s => s.id === l.subjectId);
-        const u = s?.units.find(u => u.id === l.unitId);
-        if (!s) return;
-        html += `
-          <div class="log-entry">
-            <div class="log-entry-icon">📖</div>
-            <div class="log-entry-body">
-              <div class="log-entry-title">${s.name} — ${u?.name || '不明'}</div>
-              <div class="log-entry-sub">${formatDate(l.date)}${l.notes ? ' · ' + l.notes : ''}</div>
-            </div>
-            <div class="log-entry-time">${minutesToHM(l.minutes)}</div>
-          </div>`;
-      });
-      html += `</div>`;
+      html += `
+        <div style="margin:12px 16px 0;background:var(--card);border-radius:16px;padding:16px;box-shadow:0 2px 12px rgba(108,92,231,0.06)">
+          <div style="font-size:12px;font-weight:700;color:var(--subtext);letter-spacing:0.5px;text-transform:uppercase;margin-bottom:10px">最近の記録</div>
+          ${recent.map(l => {
+            const s = state.data.subjects.find(s => s.id === l.subjectId);
+            const u = s?.units.find(u => u.id === l.unitId);
+            if (!s) return '';
+            return `
+              <div class="log-entry">
+                <div class="log-entry-icon">📖</div>
+                <div class="log-entry-body">
+                  <div class="log-entry-title">${s.name} — ${u?.name||'不明'}</div>
+                  <div class="log-entry-sub">${formatDate(l.date)}</div>
+                </div>
+                <div class="log-entry-time">${minutesToHM(l.minutes)}</div>
+              </div>`;
+          }).join('')}
+        </div>`;
     }
   }
 
@@ -505,6 +559,16 @@ function renderCalendar() {
   const busyDays = state.data.settings.busyDays || [];
   const year = state.calendarYear;
   const month = state.calendarMonth;
+
+  // Auto-generate schedules for subjects that have units but no schedule
+  let scheduleGenerated = false;
+  state.data.subjects.forEach(s => {
+    if (s.units.length > 0 && (!s.schedule || s.schedule.length === 0)) {
+      s.schedule = generateSchedule(s);
+      scheduleGenerated = true;
+    }
+  });
+  if (scheduleGenerated) saveData(state.data);
 
   // Collect all schedule entries for this month
   const scheduleMap = {}; // date → [{subjectName, unitName, minutes}]
